@@ -3,7 +3,7 @@
 Esta guía cubre el camino completo desde cero hasta un sistema funcionando en AWS Academy, incluyendo infraestructura, despliegue y verificación end-to-end.
 
 **Tiempo estimado total:** ~90 minutos  
-**Costo estimado AWS Academy:** ~$2–4 USD (NAT Gateway + EKS + EC2 t3.small × 2 nodos durante la demo)
+**Costo estimado AWS Academy:** ~$3–5 USD (NAT Gateway + EKS + EC2 t3.medium × 2 nodos durante la demo)
 
 ---
 
@@ -365,7 +365,7 @@ helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
   --set clusterName=como-vapp-eks \
   --set region=us-east-1 \
   --set vpcId=vpc-01c2081877a103408 \
-  --set serviceAccount.create=false \
+  --set serviceAccount.create=true \
   --set serviceAccount.name=aws-load-balancer-controller
 
 # Verificar que el controlador está corriendo (~30 seg)
@@ -374,8 +374,8 @@ kubectl -n kube-system get pods -l app.kubernetes.io/name=aws-load-balancer-cont
 ```
 
 > **AWS Academy — parámetros críticos:**
-> - `--set region` y `--set vpcId` son obligatorios — sin ellos el controlador no puede detectar la región desde EC2 metadata y entra en CrashLoopBackOff.
-> - `--set serviceAccount.create=false` — el service account debe existir previamente (creado por `rbac.yaml`) para que el controlador use el rol del nodo (LabRole) en vez de IRSA.
+> - `--set region` y `--set vpcId` son **obligatorios** — sin ellos el controlador no puede detectar la región desde EC2 metadata y entra en CrashLoopBackOff.
+> - `--set serviceAccount.create=true` — el controlador crea su propio service account en `kube-system`. Usando `false` el controlador falla si el SA no preexiste en ese namespace. Los pods usan el instance profile del nodo (LabRole) via IMDS en lugar de IRSA.
 
 ---
 
@@ -485,6 +485,9 @@ kubectl -n como-vapp-dev get ingress como-vapp-ingress
 kubectl -n como-vapp-dev get ingress como-vapp-ingress \
   -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
 
+# ALB DNS actual (cuenta Academy 886240425170)
+# k8s-comovapp-comovapp-df69069754-1646076730.us-east-1.elb.amazonaws.com
+
 export ALB_DNS=$(kubectl -n como-vapp-dev get ingress como-vapp-ingress \
   -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
 echo "ALB: http://$ALB_DNS"
@@ -511,20 +514,37 @@ Verificar que el sitio carga abriendo `http://$TF_FRONTEND_URL` en el navegador.
 
 ### Health checks de todos los servicios
 
+> **Nota sobre el endpoint `/health` y el ALB:**
+> El path `/health` está configurado como `alb.ingress.kubernetes.io/healthcheck-path` — es el chequeo **interno** del ALB hacia los pods. No está en las reglas de enrutamiento del ingress (solo `/orders` está expuesto). Un `curl http://$ALB_DNS/health` retorna 404 porque el ALB no tiene regla para ese path. Para verificar que los targets están sanos, usar `describe-target-health`.
+
 ```bash
-# orders-service (vía ALB público)
-curl http://$ALB_DNS/health
+# Verificar que los targets del ALB están healthy
+TG_ARN=$(aws elbv2 describe-target-groups \
+  --query 'TargetGroups[?contains(TargetGroupName, `como`)].TargetGroupArn' \
+  --output text --region us-east-1)
+aws elbv2 describe-target-health --target-group-arn $TG_ARN --region us-east-1
+# Ambos targets deben mostrar "State": "healthy"
+
+# orders-service — health check directo (vía port-forward)
+kubectl -n como-vapp-dev port-forward deploy/orders-service 8080:8080 &
+sleep 2
+curl http://localhost:8080/health
 # {"status":"ok","service":"orders-service"}
 
 # admin-service (vía port-forward — servicio interno)
 kubectl -n como-vapp-dev port-forward deploy/admin-service 8081:8081 &
+sleep 2
 curl http://localhost:8081/health
 # {"status":"ok","service":"admin-service"}
 
 # notifications-service (vía port-forward — servicio interno)
 kubectl -n como-vapp-dev port-forward deploy/notifications-service 8082:8082 &
+sleep 2
 curl http://localhost:8082/health
-# {"status":"ok","service":"notifications-service","queueConnected":true,"sesEnabled":true}
+# {"status":"ok","service":"notifications-service"}
+
+# Matar los port-forwards cuando termines
+kill %1 %2 %3 2>/dev/null
 ```
 
 ### Flujo completo de un pedido
@@ -696,13 +716,15 @@ kubectl delete namespace como-vapp-dev
 aws elbv2 describe-load-balancers \
   --query 'LoadBalancers[?contains(LoadBalancerName, `como-vapp`)].State'
 
-# 3. Eliminar el clúster EKS (tarda ~5–10 min)
-eksctl delete cluster --name como-vapp-eks --region us-east-1
+# 3. Eliminar el node group y el clúster EKS (tarda ~10 min)
+aws eks delete-nodegroup --cluster-name como-vapp-eks --nodegroup-name como-vapp-nodes --region us-east-1
+# Esperar que el node group se elimine, luego:
+aws eks delete-cluster --name como-vapp-eks --region us-east-1
 
 # 4. Destruir toda la infraestructura de Terraform
 cd infra/terraform
-terraform destroy -var="ses_verified_sender=$TF_SES_SENDER"
-# Escribir "yes" cuando se pida confirmación
+terraform destroy -auto-approve
+# Con S3 backend: el state queda en S3, no es necesario pasarlo manualmente
 
 # 5. Verificar que no quedan recursos (para evitar cargos)
 aws ec2 describe-instances --query 'Reservations[*].Instances[?State.Name!=`terminated`]'
@@ -759,10 +781,48 @@ kubectl -n como-vapp-dev logs <pod> --previous
 ### ALB no se crea (Ingress sin ADDRESS)
 
 ```bash
-kubectl -n kube-system logs deploy/aws-load-balancer-controller | tail -30
-# Causas comunes:
-# - Las subnets no tienen el tag kubernetes.io/role/elb=1 (lo pone TF)
-# - El serviceAccount del controlador no tiene permisos (usar LabRole del nodo)
+kubectl -n kube-system logs deploy/aws-load-balancer-controller | grep -i "error\|warn" | tail -30
+```
+
+**Causa 1 — `no EC2 IMDS role found`:** El hop limit de IMDS en los nodos es 1 (default). Los pods necesitan 2. Fix:
+
+```bash
+INSTANCE_IDS=$(kubectl get nodes -o jsonpath='{.items[*].spec.providerID}' | tr ' ' '\n' | sed 's/.*\///')
+for ID in $INSTANCE_IDS; do
+  aws ec2 modify-instance-metadata-options \
+    --instance-id $ID \
+    --http-put-response-hop-limit 2 \
+    --http-endpoint enabled \
+    --region us-east-1
+done
+# Reiniciar pods del LBC después del fix
+kubectl -n kube-system rollout restart deployment/aws-load-balancer-controller
+```
+
+**Causa 2 — Service account no existe:** El LBC fue instalado con `serviceAccount.create=false` pero el SA no existía. Fix: reinstalar con `serviceAccount.create=true`.
+
+**Causa 3 — Ingress atascado con finalizer:** Si el ingress no puede eliminarse:
+
+```bash
+kubectl -n como-vapp-dev patch ingress como-vapp-ingress \
+  -p '{"metadata":{"finalizers":[]}}' --type=merge
+kubectl -n como-vapp-dev delete ingress como-vapp-ingress
+kubectl -n como-vapp-dev apply -f deploy/k8s/ingress.yaml
+```
+
+### Pods con `NoCredentialsError` (botocore)
+
+```bash
+# Síntoma en logs: botocore.exceptions.NoCredentialsError: Unable to locate credentials
+# Causa: IMDS hop limit = 1, los pods no pueden obtener credenciales del LabRole
+```
+
+**Fix:** Aplicar el fix de hop limit (ver sección anterior) y reiniciar los pods:
+
+```bash
+kubectl -n como-vapp-dev rollout restart deployment/orders-service
+kubectl -n como-vapp-dev rollout restart deployment/admin-service
+kubectl -n como-vapp-dev rollout restart deployment/notifications-service
 ```
 
 ### Lambda no procesa eventos de DynamoDB Streams
@@ -793,3 +853,12 @@ aws logs tail /aws/lambda/como-vapp-dev-stream-processor --format short
 # Error: "AWS Config is not enabled in this region"
 # Solución: completar el paso 4 (habilitar Config manualmente en la consola) antes de aplicar las reglas
 ```
+
+### Errores de X-Ray en los logs de pods
+
+```
+SamplingRuleRecords is missing in getSamplingRules response:
+'User: ...assumed-role/LabRole/... is not authorized to perform: xray:GetSamplingRules'
+```
+
+**Esto es ruido — no afecta la funcionalidad.** Los pods tienen OpenTelemetry auto-instrumentation inyectado que intenta conectarse a X-Ray, pero el LabRole de Academy no tiene permisos para X-Ray. Los servicios responden peticiones HTTP con normalidad. No requiere acción.
