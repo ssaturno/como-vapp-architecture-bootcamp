@@ -59,6 +59,20 @@ kubectl apply -f k8s/
 kubectl get pods -n como-vapp-dev -w
 ```
 
+> **Problema conocido — pod en `Pending`:** Si después de aplicar los manifiestos algún pod queda en `Pending` (usualmente `notifications-service`), verificar la causa:
+> ```bash
+> kubectl describe pod <nombre-pod> -n como-vapp-dev | tail -15
+> ```
+> Si el evento dice `Too many pods` o `didn't match pod topology spread constraints`, el node group necesita un nodo extra. Escalar a 3 nodos:
+> ```bash
+> aws eks update-nodegroup-config \
+>   --cluster-name como-vapp-eks \
+>   --nodegroup-name como-vapp-nodes-med \
+>   --scaling-config minSize=2,maxSize=4,desiredSize=3 \
+>   --region us-east-1
+> ```
+> Esperar ~3 minutos. El pod se scheduleará automáticamente.
+
 **4. Verificar que el ALB tiene targets healthy**
 
 ```bash
@@ -67,11 +81,55 @@ kubectl get ingress -n como-vapp-dev
 ```
 Copiar el ADDRESS del ingress. Luego verificar:
 ```bash
-export ALB_DNS=<ADDRESS copiado>
+export ALB_DNS=k8s-comovapp-comovapp-df69069754-1646076730.us-east-1.elb.amazonaws.com 
 curl -s http://$ALB_DNS/orders | head -c 100
 # Debe responder JSON, no "Connection refused" ni 502
 ```
 > El ALB puede tardar 2-3 minutos en marcar los targets como healthy después de que los pods estén Running. Si da 502, esperar y reintentar.
+
+> **Problema conocido — ALB responde 503:** El AWS Load Balancer Controller perdió credenciales por IMDS hop limit en 1 (ocurre cuando se agrega un nodo nuevo al escalar el node group). Diagnóstico: `kubectl describe ingress -n como-vapp-dev | tail -10` mostrará `FailedBuildModel ... no EC2 IMDS role found`. Fix:
+> ```bash
+> # 1. Actualizar hop limit a 2 en todos los nodos
+> for id in $(aws ec2 describe-instances \
+>   --filters "Name=tag:eks:nodegroup-name,Values=como-vapp-nodes-med" \
+>             "Name=instance-state-name,Values=running" \
+>   --query "Reservations[].Instances[].InstanceId" \
+>   --output text); do
+>   aws ec2 modify-instance-metadata-options \
+>     --instance-id $id \
+>     --http-put-response-hop-limit 2 \
+>     --http-endpoint enabled
+>   echo "Fixed: $id"
+> done
+> ```
+> ```bash
+> # 2. Reiniciar el Load Balancer Controller
+> kubectl rollout restart deployment aws-load-balancer-controller -n kube-system
+> kubectl rollout status deployment aws-load-balancer-controller -n kube-system
+> ```
+> Esperar ~1 minuto y reintentar. **Nota:** `{"detail":"Method Not Allowed"}` en `GET /orders` es comportamiento esperado — el endpoint solo acepta `POST`. El ALB está funcionando correctamente.
+
+> **Problema conocido — POST /orders responde 500 (`NoCredentialsError`):** Los pods de los servicios no pueden obtener credenciales de IMDS. Ocurre cuando un nodo nuevo se agrega al escalar el node group (hop limit 1 por defecto) y algún pod se scheduleó en él. Diagnóstico: `kubectl logs -n como-vapp-dev -l app=orders-service --tail=20 --prefix` mostrará `botocore.exceptions.NoCredentialsError: Unable to locate credentials`. Fix:
+> ```bash
+> # 1. Re-aplicar hop limit a 2 en todos los nodos
+> for id in $(aws ec2 describe-instances \
+>   --filters "Name=tag:eks:nodegroup-name,Values=como-vapp-nodes-med" \
+>             "Name=instance-state-name,Values=running" \
+>   --query "Reservations[].Instances[].InstanceId" \
+>   --output text); do
+>   aws ec2 modify-instance-metadata-options \
+>     --instance-id $id \
+>     --http-put-response-hop-limit 2 \
+>     --http-endpoint enabled
+>   echo "Fixed: $id"
+> done
+> ```
+> ```bash
+> # 2. Reiniciar todos los servicios
+> kubectl rollout restart deployment orders-service admin-service notifications-service -n como-vapp-dev
+> kubectl rollout status deployment orders-service -n como-vapp-dev
+> ```
+> Esperar ~1 minuto y reintentar el POST.
 
 **5. Actualizar la URL del frontend si el ALB_DNS cambió**
 
@@ -124,7 +182,7 @@ aws s3 sync frontend/dist/ s3://como-vapp-dev-frontend/ --delete
 **Acción:** En CloudShell, ejecutar el PATCH a EN_PROGRESO.
 
 ```bash
-curl -s -X PATCH http://localhost:8081/orders/<ID>/status \
+curl -s -X PATCH http://localhost:8081/orders/92122f20-9324-4577-ad61-b61c793fafd3/status \
   -H "Content-Type: application/json" \
   -d '{"estadoNuevo": "EN_PROGRESO", "origen": "ADMIN"}' | python3 -m json.tool
 ```
