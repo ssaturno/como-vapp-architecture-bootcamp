@@ -589,11 +589,10 @@
   const STATUS_MAP = {
     'CREADO':      { label: 'Recibido',       badge: 'badge-gray'   },
     'EN_PROGRESO': { label: 'En preparación', badge: 'badge-yellow' },
-    'EN_CAMINO':   { label: 'En camino',      badge: 'badge-blue'   },
     'ENTREGADO':   { label: 'Entregado',      badge: 'badge-green'  },
     'CANCELADO':   { label: 'Cancelado',      badge: 'badge-gray'   },
   };
-  const STATUSES_ORDER = ['CREADO', 'EN_PROGRESO', 'EN_CAMINO', 'ENTREGADO'];
+  const STATUSES_ORDER = ['CREADO', 'EN_PROGRESO', 'ENTREGADO'];
 
   function getStoredIds() {
     try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
