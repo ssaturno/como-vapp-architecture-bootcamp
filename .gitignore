@@ -1,0 +1,27 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform.lock.hcl
+tfplan
+
+# Lambda build artifact
+infra/lambda/*.zip
+
+# Local artifacts / demo outputs
+artifacts/
+
+# Env and secrets
+.env
+.env.*
+secrets.*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+*.iml
+
+# Logs
+*.log

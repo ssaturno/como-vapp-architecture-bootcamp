@@ -1,0 +1,77 @@
+services:
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: dynamodb-local
+    ports:
+      - "8000:8000"
+    command: "-jar DynamoDBLocal.jar -inMemory -sharedDb"
+
+  elasticmq:
+    image: softwaremill/elasticmq-native:1.6.7
+    container_name: elasticmq
+    ports:
+      - "9324:9324"
+
+  orders-service:
+    image: orders-service:local
+    container_name: orders-service
+    build:
+      context: ./services/orders-dotnet
+    environment:
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=dummy
+      - AWS_SECRET_ACCESS_KEY=dummy
+      - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
+      - DYNAMODB_TABLE_NAME=orders-local
+    ports:
+      - "8080:8080"
+    depends_on:
+      - dynamodb-local
+
+  admin-service:
+    image: admin-service:local
+    container_name: admin-service
+    build:
+      context: ./services/admin-kotlin
+    environment:
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=dummy
+      - AWS_SECRET_ACCESS_KEY=dummy
+      - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
+      - DYNAMODB_TABLE_NAME=orders-local
+      - SQS_ENDPOINT=http://elasticmq:9324
+      - SQS_QUEUE_URL=http://elasticmq:9324/000000000000/notifications-local
+      - SQS_QUEUE_NAME=notifications-local
+    ports:
+      - "8081:8081"
+    depends_on:
+      - dynamodb-local
+      - elasticmq
+
+  notifications-service:
+    image: notifications-service:local
+    container_name: notifications-service
+    build:
+      context: ./services/notifications-python
+    environment:
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=dummy
+      - AWS_SECRET_ACCESS_KEY=dummy
+      - SQS_ENDPOINT=http://elasticmq:9324
+      - SQS_QUEUE_NAME=notifications-local
+      - USE_SES=false
+      - OUTBOX_FILE=/app/data/outbox.jsonl
+    ports:
+      - "8082:8082"
+    volumes:
+      - ./artifacts:/app/data
+    depends_on:
+      - elasticmq
+
+  frontend:
+    image: frontend-react:local
+    container_name: frontend
+    build:
+      context: ./frontend/react-app
+    ports:
+      - "3000:80"
