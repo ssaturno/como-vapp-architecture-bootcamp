@@ -24,6 +24,66 @@
 
 ## Parte 2 — Demo en vivo (8 min)
 
+### ⚠️ Si el ambiente AWS estaba apagado — Reactivación previa
+
+> El frontend (S3) siempre está disponible, pero el backend (EKS + ALB) se apaga con la sesión de Academy. Si los pods no están corriendo, los botones del frontend darán error. Hacer esto **antes** de la demo.
+
+**1. Renovar credenciales de Academy**
+
+En AWS Academy → Launch AWS Learner Lab → copiar las credenciales de AWS CLI y pegarlas en CloudShell:
+```bash
+# Pegar el bloque completo de credenciales (aws configure o export de variables)
+aws sts get-caller-identity   # Verificar que funcionan
+```
+
+**2. Verificar que los nodos EKS están activos**
+
+```bash
+aws eks update-kubeconfig --name como-vapp-eks --region us-east-1
+kubectl get nodes
+```
+- Si aparecen 2 nodos en estado `Ready` → continuar al paso 3.
+- Si no hay nodos o están en `NotReady` → el node group se eliminó. Recrearlo desde la consola:
+  AWS Console → EKS → `como-vapp-eks` → Compute → Add node group con los mismos parámetros (`t3.medium`, `AL2023_x86_64_STANDARD`, subnets privadas). Esperar ~5 min.
+
+**3. Verificar/levantar los pods**
+
+```bash
+kubectl get pods -n como-vapp-dev
+```
+- Si aparecen 6 pods en `Running` → todo listo, saltar al paso 4.
+- Si no hay pods o están en error → re-aplicar los manifiestos:
+```bash
+kubectl apply -f k8s/
+# Esperar ~1 minuto
+kubectl get pods -n como-vapp-dev -w
+```
+
+**4. Verificar que el ALB tiene targets healthy**
+
+```bash
+# Obtener el DNS del ALB (puede haber cambiado si se recreó)
+kubectl get ingress -n como-vapp-dev
+```
+Copiar el ADDRESS del ingress. Luego verificar:
+```bash
+export ALB_DNS=<ADDRESS copiado>
+curl -s http://$ALB_DNS/orders | head -c 100
+# Debe responder JSON, no "Connection refused" ni 502
+```
+> El ALB puede tardar 2-3 minutos en marcar los targets como healthy después de que los pods estén Running. Si da 502, esperar y reintentar.
+
+**5. Actualizar la URL del frontend si el ALB_DNS cambió**
+
+Si el DNS del ALB es diferente al original, hay que actualizar el frontend en S3:
+```bash
+# En el repo local, editar el archivo de configuración del frontend con el nuevo DNS
+# Luego hacer sync a S3
+aws s3 sync frontend/dist/ s3://como-vapp-dev-frontend/ --delete
+```
+
+---
+
 ### Antes de la demo — verificar que está listo:
 - [ ] Port-forward al admin-service activo en CloudShell: `kubectl -n como-vapp-dev port-forward deploy/admin-service 8081:8081 &`
 - [ ] Tab 1: Frontend abierto — `http://como-vapp-dev-frontend.s3-website-us-east-1.amazonaws.com`
