@@ -1,0 +1,119 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# notifications-service — Deployment + Service
+# 2 replicas (Misión 1 criterio de éxito)
+# Resource limits from Misión 2 Q6 table (Python: 50m/150m CPU, 64Mi/128Mi RAM)
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifications-service
+  namespace: como-vapp-dev
+  labels:
+    app: notifications-service
+    app.kubernetes.io/part-of: como-vapp
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: notifications-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: notifications-service
+        app.kubernetes.io/part-of: como-vapp
+    spec:
+      serviceAccountName: notifications-sa
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: notifications-service
+          image: REEMPLAZAR_ECR_URI/como-vapp-dev-notifications-service:0.1.0
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8082
+              protocol: TCP
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          envFrom:
+            - configMapRef:
+                name: notifications-config
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+          # Resource limits — Misión 2 Q6 (Python/notifications-service)
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "150m"
+              memory: "128Mi"
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            failureThreshold: 3
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: notifications-service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notifications-service
+  namespace: como-vapp-dev
+  labels:
+    app: notifications-service
+    app.kubernetes.io/part-of: como-vapp
+spec:
+  selector:
+    app: notifications-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8082
+      protocol: TCP
+  type: ClusterIP

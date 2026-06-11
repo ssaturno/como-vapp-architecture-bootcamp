@@ -1,0 +1,91 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# RBAC — ServiceAccounts y permisos K8s por namespace (Misión 2 Q8)
+#
+# AWS Academy — credenciales AWS en los pods:
+#   IRSA (IAM Roles for Service Accounts) NO está disponible en Academy porque
+#   requiere crear roles IAM personalizados, lo cual está restringido.
+#   En Academy, los pods obtienen credenciales AWS del instance profile del
+#   nodo EC2, que usa LabRole. Todos los pods del clúster comparten esas
+#   credenciales (esto no es mínimo privilegio, es la restricción de Academy).
+#
+# PRODUCCIÓN REAL (fuera de Academy):
+#   1. Habilitar OIDC provider en el clúster EKS
+#   2. Crear un rol IAM por servicio con trust hacia el ServiceAccount específico
+#   3. Anotar el ServiceAccount con eks.amazonaws.com/role-arn
+#   4. Cada pod tendrá exactamente los permisos que necesita (mínimo privilegio)
+#
+# Lo que SÍ aplica en Academy: el RBAC de K8s controla qué puede hacer cada
+# pod DENTRO del clúster (kubectl, secrets, configmaps), no en AWS.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Service Accounts — uno por servicio ──────────────────────────────────────
+# Sin anotaciones IRSA en Academy; los pods usan el instance profile del nodo.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: orders-sa
+  namespace: como-vapp-dev
+  labels:
+    app.kubernetes.io/part-of: como-vapp
+  # PRODUCCIÓN — descomentar y reemplazar ARN:
+  # annotations:
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/como-vapp-orders-role
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admin-sa
+  namespace: como-vapp-dev
+  labels:
+    app.kubernetes.io/part-of: como-vapp
+  # PRODUCCIÓN:
+  # annotations:
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/como-vapp-admin-role
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: notifications-sa
+  namespace: como-vapp-dev
+  labels:
+    app.kubernetes.io/part-of: como-vapp
+  # PRODUCCIÓN:
+  # annotations:
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/como-vapp-notifications-role
+
+# ── Role — permisos de solo lectura para desarrolladores dentro del namespace ─
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: developer-readonly
+  namespace: como-vapp-dev
+  labels:
+    app.kubernetes.io/part-of: como-vapp
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps", "endpoints", "events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: developer-readonly-binding
+  namespace: como-vapp-dev
+  labels:
+    app.kubernetes.io/part-of: como-vapp
+subjects:
+  - kind: Group
+    name: "como-vapp-developers"
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: developer-readonly
+  apiGroup: rbac.authorization.k8s.io

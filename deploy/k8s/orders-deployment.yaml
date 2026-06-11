@@ -1,0 +1,128 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# orders-service — Deployment + Service
+# 2 replicas (Misión 1 criterio de éxito)
+# Resource limits from Misión 2 Q6 table
+# securityContext hardened per Misión 2 Q7
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders-service
+  namespace: como-vapp-dev
+  labels:
+    app: orders-service
+    app.kubernetes.io/part-of: como-vapp
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: orders-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: orders-service
+        app.kubernetes.io/part-of: como-vapp
+    spec:
+      serviceAccountName: orders-sa
+
+      # Pod-level security context (Misión 2 Q7)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: orders-service
+          # Replace with actual ECR URI after: terraform output ecr_repository_urls
+          image: REEMPLAZAR_ECR_URI/como-vapp-dev-orders-service:0.1.0
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          # Container-level security hardening (Misión 2 Q7)
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          # Public config from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: orders-config
+
+          # Writable temp directory (needed by Python/uvicorn for .pyc cache)
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+          # Resource limits — Misión 2 Q6
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+
+          # Readiness probe — removes pod from load balancer until ready
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+
+          # Liveness probe — restarts pod on deadlock (Misión 2 Q17)
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            failureThreshold: 3
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+      # Spread replicas across AZs for HA
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: orders-service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orders-service
+  namespace: como-vapp-dev
+  labels:
+    app: orders-service
+    app.kubernetes.io/part-of: como-vapp
+spec:
+  selector:
+    app: orders-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+  type: ClusterIP

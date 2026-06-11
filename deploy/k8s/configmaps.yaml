@@ -1,0 +1,48 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ConfigMaps — public, non-sensitive configuration
+# Replace placeholder values with terraform output values before applying.
+#
+#   terraform output orders_table_name       → DYNAMODB_TABLE_NAME
+#   terraform output notifications_queue_url → SQS_QUEUE_URL
+#   terraform output aws_region              → AWS_REGION
+#   terraform output ses_verified_sender     → SES_VERIFIED_SENDER
+#
+# Sensitive values (credentials) are injected via the Secrets Store CSI Driver
+# (SecretProviderClass), NOT via ConfigMaps.
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: orders-config
+  namespace: como-vapp-dev
+  labels:
+    app.kubernetes.io/part-of: como-vapp
+data:
+  AWS_REGION: "us-east-1"
+  DYNAMODB_TABLE_NAME: "REEMPLAZAR_CON_TF_OUTPUT_orders_table_name"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: admin-config
+  namespace: como-vapp-dev
+  labels:
+    app.kubernetes.io/part-of: como-vapp
+data:
+  AWS_REGION: "us-east-1"
+  DYNAMODB_TABLE_NAME: "REEMPLAZAR_CON_TF_OUTPUT_orders_table_name"
+  SQS_QUEUE_URL: "REEMPLAZAR_CON_TF_OUTPUT_notifications_queue_url"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notifications-config
+  namespace: como-vapp-dev
+  labels:
+    app.kubernetes.io/part-of: como-vapp
+data:
+  AWS_REGION: "us-east-1"
+  SQS_QUEUE_URL: "REEMPLAZAR_CON_TF_OUTPUT_notifications_queue_url"
+  SES_VERIFIED_SENDER: "REEMPLAZAR_CON_TF_OUTPUT_ses_verified_sender"
+  USE_SES: "true"
