@@ -491,7 +491,7 @@
     <p class="section-sub">Cuéntanos qué necesitas y a dónde lo enviamos.</p>
     <div class="form-card">
       <div class="form-section-title">Datos del pedido</div>
-      <div class="info-box">Toda la información se guarda localmente en este navegador (modo demo).</div>
+      <div class="info-box">Los pedidos se guardan en la nube (AWS DynamoDB) vía orders-service en EKS.</div>
       <form id="order-form" onsubmit="submitOrder(event)">
         <div class="form-grid">
           <div class="form-group">
@@ -582,27 +582,26 @@
 <footer>© 2026 COMO VAPP? · Pedidos con cariño.</footer>
 
 <script>
-  const STORAGE_KEY = 'como_vapp_orders';
+  const API_URL = 'http://k8s-comovapp-comovapp-df69069754-1646076730.us-east-1.elb.amazonaws.com';
+  const HISTORY_KEY = 'como_vapp_order_ids';
   let lastCreatedId = null;
-  const STATUSES = ['Recibido', 'En preparación', 'En camino', 'Entregado'];
-  const STATUS_BADGES = {
-    'Recibido': 'badge-gray',
-    'En preparación': 'badge-yellow',
-    'En camino': 'badge-blue',
-    'Entregado': 'badge-green',
-  };
 
-  function getOrders() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+  const STATUS_MAP = {
+    'CREADO':      { label: 'Recibido',       badge: 'badge-gray'   },
+    'EN_PROGRESO': { label: 'En preparación', badge: 'badge-yellow' },
+    'EN_CAMINO':   { label: 'En camino',      badge: 'badge-blue'   },
+    'ENTREGADO':   { label: 'Entregado',      badge: 'badge-green'  },
+    'CANCELADO':   { label: 'Cancelado',      badge: 'badge-gray'   },
+  };
+  const STATUSES_ORDER = ['CREADO', 'EN_PROGRESO', 'EN_CAMINO', 'ENTREGADO'];
+
+  function getStoredIds() {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
     catch { return []; }
   }
-  function saveOrders(orders) { localStorage.setItem(STORAGE_KEY, JSON.stringify(orders)); }
-
-  function genId() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let id = 'CV-';
-    for (let i = 0; i < 7; i++) id += chars[Math.floor(Math.random() * chars.length)];
-    return id;
+  function saveOrderId(id) {
+    const ids = getStoredIds();
+    if (!ids.includes(id)) { ids.unshift(id); localStorage.setItem(HISTORY_KEY, JSON.stringify(ids)); }
   }
 
   function navigate(page) {
@@ -649,41 +648,53 @@
     document.getElementById('total-display').textContent = '$ ' + total.toLocaleString('es-CO');
   }
 
-  function submitOrder(e) {
+  async function submitOrder(e) {
     e.preventDefault();
-    const products = [];
+    const items = [];
     const names = document.querySelectorAll('.prod-name');
     const qtys = document.querySelectorAll('.prod-qty');
     const prices = document.querySelectorAll('.prod-price');
     for (let i = 0; i < names.length; i++)
       if (names[i].value.trim())
-        products.push({ name: names[i].value.trim(), qty: parseFloat(qtys[i].value)||1, price: parseFloat(prices[i].value)||0 });
+        items.push({ producto: names[i].value.trim(), cantidad: parseInt(qtys[i].value)||1, valor: parseInt(prices[i].value)||0 });
 
-    const now = new Date();
-    const order = {
-      id: genId(),
-      cliente: document.getElementById('cliente').value.trim(),
-      correo: document.getElementById('correo').value.trim(),
+    const payload = {
+      cliente: { nombre: document.getElementById('cliente').value.trim(), correo: document.getElementById('correo').value.trim() },
       direccion: document.getElementById('direccion').value.trim(),
-      products, status: 'Recibido',
-      createdAt: now.toISOString(),
-      steps: [{ label: 'Recibido', time: formatTime(now) }],
+      items
     };
-    const orders = getOrders();
-    orders.unshift(order);
-    saveOrders(orders);
-    lastCreatedId = order.id;
-    document.getElementById('modal-order-id').textContent = order.id;
-    document.getElementById('modal-overlay').classList.add('open');
-    document.getElementById('order-form').reset();
-    document.getElementById('products-body').innerHTML = '';
-    rowCount = 0;
-    updateTotal();
-    addProductRow();
+
+    const btn = document.querySelector('#order-form .btn-primary');
+    btn.disabled = true;
+    btn.textContent = 'Creando...';
+    try {
+      const res = await fetch(API_URL + '/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const order = await res.json();
+      lastCreatedId = order.idPedido;
+      saveOrderId(order.idPedido);
+      document.getElementById('modal-order-id').textContent = order.idPedido;
+      document.getElementById('modal-overlay').classList.add('open');
+      document.getElementById('order-form').reset();
+      document.getElementById('products-body').innerHTML = '';
+      rowCount = 0;
+      updateTotal();
+      addProductRow();
+    } catch (err) {
+      showToast('Error al crear el pedido. Intenta de nuevo.');
+      console.error(err);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Crear pedido';
+    }
   }
 
-  function formatTime(date) {
-    return date.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+  function formatTime(isoDate) {
+    return new Date(isoDate).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
   }
 
   function copyOrderId() {
@@ -696,79 +707,83 @@
     setTimeout(() => { document.getElementById('track-input').value = lastCreatedId; trackOrder(); }, 100);
   }
 
-  function trackOrder() {
-    const id = document.getElementById('track-input').value.trim().toUpperCase();
+  async function trackOrder() {
+    const id = document.getElementById('track-input').value.trim();
     const container = document.getElementById('track-result');
     if (!id) { container.innerHTML = ''; return; }
-    const order = getOrders().find(o => o.id === id);
-    if (!order) {
-      container.innerHTML = `<div class="empty-state"><div class="icon">🔍</div><p>No encontramos un pedido con el ID <strong>${id}</strong>.<br>Verifica el ID e intenta de nuevo.</p></div>`;
-      return;
+    container.innerHTML = '<div class="empty-state"><p>Buscando...</p></div>';
+    try {
+      const res = await fetch(API_URL + '/orders/' + encodeURIComponent(id));
+      if (res.status === 404) {
+        container.innerHTML = `<div class="empty-state"><div class="icon">🔍</div><p>No encontramos un pedido con el ID <strong>${id}</strong>.<br>Verifica el ID e intenta de nuevo.</p></div>`;
+        return;
+      }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const order = await res.json();
+      renderOrderCard(order, container);
+    } catch (err) {
+      container.innerHTML = `<div class="empty-state"><p>Error al buscar el pedido. Verifica que el ID sea correcto.</p></div>`;
+      console.error(err);
     }
-    const statusIdx = STATUSES.indexOf(order.status);
-    const stepsHtml = STATUSES.map((s, i) => {
+  }
+
+  function renderOrderCard(order, container) {
+    const si = STATUS_MAP[order.estado] || { label: order.estado, badge: 'badge-gray' };
+    const statusIdx = STATUSES_ORDER.indexOf(order.estado);
+    const stepsHtml = STATUSES_ORDER.map((s, i) => {
+      const info = STATUS_MAP[s];
+      const histEntry = order.historialEstados && order.historialEstados.find(h => h.estadoNuevo === s);
       const done = i < statusIdx, active = i === statusIdx;
-      const stepData = order.steps ? order.steps.find(st => st.label === s) : null;
       return `<div class="step ${done?'done':active?'active':''}">
         <div class="step-dot"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        <div class="step-body"><div class="step-title">${s}</div><div class="step-time">${stepData ? stepData.time : '—'}</div></div>
+        <div class="step-body"><div class="step-title">${info.label}</div><div class="step-time">${histEntry ? formatTime(histEntry.timestamp) : '—'}</div></div>
       </div>`;
     }).join('');
-    const total = order.products ? order.products.reduce((a, p) => a + p.qty * p.price, 0) : 0;
     container.innerHTML = `
       <div class="track-result-card">
         <div class="order-card-header" style="margin-bottom:16px">
-          <div><div class="order-label">Pedido</div><div class="order-id">${order.id}</div></div>
-          <span class="badge ${STATUS_BADGES[order.status]||'badge-gray'}">${order.status}</span>
+          <div><div class="order-label">Pedido</div><div class="order-id">${order.idPedido}</div></div>
+          <span class="badge ${si.badge}">${si.label}</span>
         </div>
         <div class="track-meta">
-          <div class="track-meta-item"><div class="label">Cliente</div><div class="value">${order.cliente}</div></div>
+          <div class="track-meta-item"><div class="label">Cliente</div><div class="value">${order.cliente.nombre}</div></div>
           <div class="track-meta-item"><div class="label">Dirección</div><div class="value">${order.direccion}</div></div>
-          <div class="track-meta-item"><div class="label">Total</div><div class="value">$ ${total.toLocaleString('es-CO')}</div></div>
-          <div class="track-meta-item"><div class="label">Fecha</div><div class="value">${new Date(order.createdAt).toLocaleDateString('es-CO')}</div></div>
+          <div class="track-meta-item"><div class="label">Total</div><div class="value">$ ${(order.total||0).toLocaleString('es-CO')}</div></div>
+          <div class="track-meta-item"><div class="label">Fecha</div><div class="value">${new Date(order.fechaCreacion).toLocaleDateString('es-CO')}</div></div>
         </div>
         <div class="steps">${stepsHtml}</div>
-        <div style="margin-top:20px">
-          ${statusIdx < STATUSES.length-1
-            ? `<button class="btn-sm" onclick="advanceStatus('${order.id}')">Avanzar estado →</button>`
-            : '<span style="font-size:.85rem;color:var(--accent-dark);font-weight:600">✓ Pedido entregado</span>'}
-        </div>
       </div>`;
   }
 
-  function advanceStatus(id) {
-    const orders = getOrders();
-    const order = orders.find(o => o.id === id);
-    if (!order) return;
-    const idx = STATUSES.indexOf(order.status);
-    if (idx < STATUSES.length - 1) {
-      order.status = STATUSES[idx + 1];
-      if (!order.steps) order.steps = [];
-      order.steps.push({ label: order.status, time: formatTime(new Date()) });
-      saveOrders(orders);
-      showToast('Estado actualizado: ' + order.status);
-      trackOrder();
-    }
-  }
-
-  function renderHistory() {
-    const orders = getOrders();
+  async function renderHistory() {
+    const ids = getStoredIds();
     const container = document.getElementById('history-container');
-    if (!orders.length) {
+    if (!ids.length) {
       container.innerHTML = `<div class="empty-state"><div class="icon">📋</div><p>Aún no has creado ningún pedido.<br>¡Crea el primero!</p><br><button class="btn btn-primary" onclick="navigate('home')" style="margin-top:8px">Crear pedido</button></div>`;
       return;
     }
-    container.innerHTML = `<div class="history-list">${orders.map(o => `
-      <div class="history-item" onclick="goToOrder('${o.id}')">
+    container.innerHTML = '<div class="empty-state"><p>Cargando historial...</p></div>';
+    const orders = (await Promise.all(ids.map(async id => {
+      try { const r = await fetch(API_URL + '/orders/' + id); return r.ok ? r.json() : null; }
+      catch { return null; }
+    }))).filter(Boolean);
+    if (!orders.length) {
+      container.innerHTML = `<div class="empty-state"><p>No se pudieron cargar los pedidos.</p></div>`;
+      return;
+    }
+    container.innerHTML = `<div class="history-list">${orders.map(o => {
+      const si2 = STATUS_MAP[o.estado] || { label: o.estado, badge: 'badge-gray' };
+      return `<div class="history-item" onclick="goToOrder('${o.idPedido}')">
         <div class="history-item-left">
-          <div class="id">${o.id}</div>
-          <div class="name">${o.cliente} · ${o.direccion}</div>
+          <div class="id">${o.idPedido.substring(0,8)}...</div>
+          <div class="name">${o.cliente.nombre} · ${o.direccion}</div>
         </div>
         <div class="history-item-right">
-          <span class="badge ${STATUS_BADGES[o.status]||'badge-gray'}">${o.status}</span>
-          <div class="date">${new Date(o.createdAt).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'})}</div>
+          <span class="badge ${si2.badge}">${si2.label}</span>
+          <div class="date">${new Date(o.fechaCreacion).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'})}</div>
         </div>
-      </div>`).join('')}</div>`;
+      </div>`;
+    }).join('')}</div>`;
   }
 
   function goToOrder(id) {

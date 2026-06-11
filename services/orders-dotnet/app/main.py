@@ -18,6 +18,7 @@ from decimal import Decimal
 import boto3
 from botocore.exceptions import ClientError
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
 
 # ── Structured logger ─────────────────────────────────────────────────────────
@@ -88,6 +89,12 @@ class CreateOrderRequest(BaseModel):
 # ── App ───────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="orders-service", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")
