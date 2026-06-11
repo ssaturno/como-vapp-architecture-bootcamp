@@ -21,42 +21,43 @@
 # Si el recorder no está activo, terraform apply ignorará estos recursos
 # con el warning: "AWS Config is not enabled in this region".
 
-resource "aws_config_config_rule" "restricted_ssh" {
-  name        = "${local.prefix}-restricted-ssh"
-  description = "Verifica que los security groups no permitan SSH (puerto 22) irrestricto"
+# ── Config Rules ─────────────────────────────────────────────────────────────
+# Estas reglas requieren que el Config Recorder esté activo antes de aplicarse.
+# Paso 1: Habilitar AWS Config manualmente en la consola (paso 4 de la guía).
+# Paso 2: Descomentar los recursos de abajo y correr terraform apply de nuevo.
 
-  source {
-    owner             = "AWS"
-    source_identifier = "INCOMING_SSH_DISABLED"
-  }
-}
+# resource "aws_config_config_rule" "restricted_ssh" {
+#   name        = "${local.prefix}-restricted-ssh"
+#   description = "Verifica que los security groups no permitan SSH (puerto 22) irrestricto"
+#   source {
+#     owner             = "AWS"
+#     source_identifier = "INCOMING_SSH_DISABLED"
+#   }
+# }
 
-resource "aws_config_config_rule" "vpc_flow_logs" {
-  name        = "${local.prefix}-vpc-flow-logs-enabled"
-  description = "Verifica que VPC Flow Logs esté habilitado"
+# resource "aws_config_config_rule" "vpc_flow_logs" {
+#   name        = "${local.prefix}-vpc-flow-logs-enabled"
+#   description = "Verifica que VPC Flow Logs esté habilitado"
+#   source {
+#     owner             = "AWS"
+#     source_identifier = "VPC_FLOW_LOGS_ENABLED"
+#   }
+# }
 
-  source {
-    owner             = "AWS"
-    source_identifier = "VPC_FLOW_LOGS_ENABLED"
-  }
-}
+# resource "aws_config_config_rule" "encrypted_volumes" {
+#   name        = "${local.prefix}-encrypted-volumes"
+#   description = "Verifica que los volúmenes EBS estén cifrados"
+#   source {
+#     owner             = "AWS"
+#     source_identifier = "ENCRYPTED_VOLUMES"
+#   }
+# }
 
-resource "aws_config_config_rule" "encrypted_volumes" {
-  name        = "${local.prefix}-encrypted-volumes"
-  description = "Verifica que los volúmenes EBS estén cifrados"
-
-  source {
-    owner             = "AWS"
-    source_identifier = "ENCRYPTED_VOLUMES"
-  }
-}
-
-resource "aws_config_config_rule" "dynamodb_encryption" {
-  name        = "${local.prefix}-dynamodb-encryption"
-  description = "Verifica que las tablas DynamoDB estén cifradas en reposo"
-
-  source {
-    owner             = "AWS"
-    source_identifier = "DYNAMODB_TABLE_ENCRYPTED_AT_REST"
-  }
-}
+# resource "aws_config_config_rule" "dynamodb_encryption" {
+#   name        = "${local.prefix}-dynamodb-encryption"
+#   description = "Verifica que las tablas DynamoDB estén cifradas en reposo"
+#   source {
+#     owner             = "AWS"
+#     source_identifier = "DYNAMODB_TABLE_ENCRYPTED_AT_REST"
+#   }
+# }

@@ -106,7 +106,7 @@ output "frontend_website_url" {
 
 output "ses_verified_sender" {
   description = "Verified SES sender address"
-  value       = aws_ses_email_identity.verified_sender.email
+  value       = var.ses_verified_sender
 }
 
 # ── IAM (AWS Academy) ────────────────────────────────────────────────────────

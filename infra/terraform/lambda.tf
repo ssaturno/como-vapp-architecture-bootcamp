@@ -6,8 +6,8 @@
 
 data "archive_file" "stream_handler" {
   type        = "zip"
-  source_file = "${path.module}/../../lambda/stream_handler.py"
-  output_path = "${path.module}/../../lambda/stream_handler.zip"
+  source_file = "${path.module}/../lambda/stream_handler.py"
+  output_path = "${path.module}/../lambda/stream_handler.zip"
 }
 
 resource "aws_lambda_function" "stream_processor" {
@@ -23,7 +23,6 @@ resource "aws_lambda_function" "stream_processor" {
   environment {
     variables = {
       SQS_QUEUE_URL = aws_sqs_queue.notifications.id
-      AWS_REGION    = var.aws_region
     }
   }
 

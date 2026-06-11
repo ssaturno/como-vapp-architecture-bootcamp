@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\samaris.saturnom\\\\OneDrive - Perficient, Inc\\\\Desktop\\\\STUDIES\\\\Arquitectura de Nube Bootcamp\\\\Como_Vapp_Project\\\\infra\\\\lambda\")"
+      "PowerShell(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\samaris.saturnom\\\\OneDrive - Perficient, Inc\\\\Desktop\\\\STUDIES\\\\Arquitectura de Nube Bootcamp\\\\Como_Vapp_Project\\\\infra\\\\lambda\")",
+      "Bash(terraform output *)"
     ]
   }
 }

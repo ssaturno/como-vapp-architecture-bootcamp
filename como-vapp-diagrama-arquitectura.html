@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>COMO VAPP? — Diagrama de Arquitectura AWS</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #f1f5f9;
+    font-family: system-ui, -apple-system, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 {
+    font-size: 15px;
+    color: #475569;
+    margin-bottom: 12px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .card {
+    background: white;
+    border-radius: 14px;
+    box-shadow: 0 4px 32px rgba(0,0,0,.12);
+    overflow: hidden;
+    width: 100%;
+    max-width: 1600px;
+  }
+  svg { display: block; width: 100%; height: auto; }
+  .legend-bar {
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    padding: 10px 20px;
+    font-size: 12px;
+    color: #64748b;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .legend-bar span { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+</style>
+</head>
+<body>
+<h1>COMO VAPP? — Arquitectura AWS · Terraform + EKS · us-east-1</h1>
+<div class="card">
+<svg viewBox="0 0 1560 920" xmlns="http://www.w3.org/2000/svg" font-family="system-ui,-apple-system,sans-serif">
+<defs>
+  <marker id="arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+    <path d="M0,0 L7,3.5 L0,7 Z" fill="#64748b"/>
+  </marker>
+  <marker id="arr-b" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+    <path d="M0,0 L7,3.5 L0,7 Z" fill="#3b82f6"/>
+  </marker>
+  <marker id="arr-o" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+    <path d="M0,0 L7,3.5 L0,7 Z" fill="#f97316"/>
+  </marker>
+  <marker id="arr-g" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+    <path d="M0,0 L7,3.5 L0,7 Z" fill="#10b981"/>
+  </marker>
+  <marker id="arr-p" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+    <path d="M0,0 L7,3.5 L0,7 Z" fill="#a855f7"/>
+  </marker>
+</defs>
+
+<!-- BACKGROUND -->
+<rect width="1560" height="920" fill="#f8fafc"/>
+
+<!-- TITLE -->
+<text x="780" y="26" text-anchor="middle" font-size="17" font-weight="800" fill="#0f172a">COMO VAPP? — Arquitectura AWS Completa</text>
+<text x="780" y="43" text-anchor="middle" font-size="11" fill="#94a3b8">Terraform + Amazon EKS (Kubernetes) · us-east-1 · Misión 2</text>
+
+<!-- ══════════════════════════════════════════════════════════
+     INTERNET ZONE
+══════════════════════════════════════════════════════════ -->
+<rect x="12" y="52" width="1536" height="68" rx="8" fill="#f0fdf4" stroke="#86efac" stroke-width="1"/>
+<text x="30" y="67" font-size="9" font-weight="700" fill="#15803d" letter-spacing="1.5">INTERNET</text>
+
+<!-- Browser user -->
+<rect x="50" y="70" width="90" height="38" rx="7" fill="white" stroke="#10b981" stroke-width="1.5"/>
+<text x="95" y="84" text-anchor="middle" font-size="13">🌐</text>
+<text x="95" y="100" text-anchor="middle" font-size="9" font-weight="600" fill="#374151">Usuarios</text>
+
+<!-- Email recipient -->
+<rect x="1420" y="70" width="90" height="38" rx="7" fill="white" stroke="#a855f7" stroke-width="1.5"/>
+<text x="1465" y="84" text-anchor="middle" font-size="13">📧</text>
+<text x="1465" y="100" text-anchor="middle" font-size="9" font-weight="600" fill="#374151">Email</text>
+
+<!-- S3 frontend user note -->
+<rect x="680" y="70" width="200" height="38" rx="7" fill="white" stroke="#10b981" stroke-width="1.5" stroke-dasharray="3,2"/>
+<text x="780" y="84" text-anchor="middle" font-size="9" font-weight="600" fill="#065f46">🪣 S3 Static Website</text>
+<text x="780" y="97" text-anchor="middle" font-size="8" fill="#059669">Frontend React → Usuarios</text>
+
+<!-- ══════════════════════════════════════════════════════════
+     AWS CLOUD BOX
+══════════════════════════════════════════════════════════ -->
+<rect x="12" y="126" width="1536" height="584" rx="10" fill="none" stroke="#fb923c" stroke-width="1.5" stroke-dasharray="7,4"/>
+<rect x="12" y="126" width="118" height="18" rx="4" fill="#fb923c"/>
+<text x="71" y="138" text-anchor="middle" font-size="9" font-weight="700" fill="white">☁️  AWS Cloud</text>
+
+<!-- ══════════════════════════════════════════════════════════
+     VPC BOX
+══════════════════════════════════════════════════════════ -->
+<rect x="25" y="150" width="1510" height="548" rx="9" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="5,3"/>
+<text x="780" y="164" text-anchor="middle" font-size="10" fill="#1d4ed8" font-weight="700">VPC  10.0.0.0/16</text>
+<text x="780" y="176" text-anchor="middle" font-size="8.5" fill="#64748b">VPC Endpoints (Gateway): DynamoDB · S3  — tráfico interno nunca sale a Internet</text>
+
+<!-- ══════════════════════════════════════════════════════════
+     PUBLIC SUBNETS
+══════════════════════════════════════════════════════════ -->
+<rect x="38" y="184" width="228" height="500" rx="8" fill="#f0fdf4" stroke="#34d399" stroke-width="1.5"/>
+<text x="152" y="198" text-anchor="middle" font-size="9" font-weight="700" fill="#065f46">PUBLIC SUBNETS</text>
+<text x="152" y="209" text-anchor="middle" font-size="8" fill="#059669">AZ-a · AZ-b</text>
+
+<!-- IGW -->
+<rect x="54" y="220" width="180" height="40" rx="7" fill="white" stroke="#10b981" stroke-width="1.5"/>
+<text x="144" y="235" text-anchor="middle" font-size="11">🌐</text>
+<text x="144" y="251" text-anchor="middle" font-size="9" font-weight="700" fill="#065f46">Internet Gateway</text>
+
+<!-- WAF + ALB -->
+<rect x="54" y="272" width="180" height="50" rx="7" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+<text x="144" y="289" text-anchor="middle" font-size="10">🛡️</text>
+<text x="144" y="302" text-anchor="middle" font-size="9" font-weight="700" fill="#1d4ed8">WAF  +  ALB</text>
+<text x="144" y="314" text-anchor="middle" font-size="8" fill="#2563eb">SG: 80/443 in · :30000+ out</text>
+
+<!-- ALB SG -->
+<rect x="59" y="334" width="170" height="26" rx="5" fill="#fef9c3" stroke="#ca8a04" stroke-width="1"/>
+<text x="144" y="350" text-anchor="middle" font-size="8.5" fill="#854d0e">🔐 ALB Security Group</text>
+
+<!-- NAT GW -->
+<rect x="54" y="372" width="180" height="40" rx="7" fill="white" stroke="#10b981" stroke-width="1.5"/>
+<text x="144" y="388" text-anchor="middle" font-size="10">🔀</text>
+<text x="144" y="402" text-anchor="middle" font-size="9" font-weight="700" fill="#065f46">NAT Gateway + EIP</text>
+
+<!-- EKS Nodes SG -->
+<rect x="59" y="424" width="170" height="26" rx="5" fill="#fef9c3" stroke="#ca8a04" stroke-width="1"/>
+<text x="144" y="440" text-anchor="middle" font-size="8.5" fill="#854d0e">🔐 EKS Nodes Security Group</text>
+
+<!-- Route Tables -->
+<rect x="54" y="462" width="180" height="46" rx="7" fill="white" stroke="#d1d5db" stroke-width="1"/>
+<text x="144" y="478" text-anchor="middle" font-size="9" font-weight="600" fill="#374151">Route Tables</text>
+<text x="144" y="491" text-anchor="middle" font-size="8" fill="#6b7280">Public → IGW</text>
+<text x="144" y="502" text-anchor="middle" font-size="8" fill="#6b7280">Private → NAT GW</text>
+
+<!-- VPC Endpoints -->
+<rect x="54" y="520" width="180" height="46" rx="7" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.5"/>
+<text x="144" y="536" text-anchor="middle" font-size="9" font-weight="600" fill="#6d28d9">VPC Endpoints</text>
+<text x="144" y="549" text-anchor="middle" font-size="8" fill="#7c3aed">DynamoDB Gateway</text>
+<text x="144" y="561" text-anchor="middle" font-size="8" fill="#7c3aed">S3 Gateway</text>
+
+<!-- CloudTrail -->
+<rect x="54" y="578" width="180" height="30" rx="6" fill="white" stroke="#d1d5db" stroke-width="1"/>
+<text x="144" y="597" text-anchor="middle" font-size="8.5" fill="#374151">📋 AWS CloudTrail (auditoría)</text>
+
+<!-- Session Manager note -->
+<rect x="54" y="620" width="180" height="30" rx="6" fill="white" stroke="#d1d5db" stroke-width="1"/>
+<text x="144" y="639" text-anchor="middle" font-size="8.5" fill="#374151">🖥️ Session Manager (no SSH)</text>
+
+<!-- ══════════════════════════════════════════════════════════
+     PRIVATE SUBNETS
+══════════════════════════════════════════════════════════ -->
+<rect x="278" y="184" width="1245" height="500" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
+<text x="900" y="198" text-anchor="middle" font-size="9" font-weight="700" fill="#1d4ed8">PRIVATE SUBNETS (AZ-a · AZ-b)  —  EC2 t3.small Node Group</text>
+
+<!-- EKS CLUSTER -->
+<rect x="293" y="208" width="1215" height="352" rx="8" fill="rgba(59,130,246,0.04)" stroke="#3b82f6" stroke-width="2"/>
+<text x="900" y="224" text-anchor="middle" font-size="10" font-weight="800" fill="#1e40af">☸️  Amazon EKS — como-vapp-eks  (eksctl create cluster)</text>
+
+<!-- AWS LBC -->
+<rect x="1170" y="232" width="160" height="30" rx="5" fill="white" stroke="#d1d5db" stroke-width="1"/>
+<text x="1250" y="244" text-anchor="middle" font-size="8" font-weight="600" fill="#374151">AWS LBC (Helm)</text>
+<text x="1250" y="255" text-anchor="middle" font-size="7.5" fill="#6b7280">ingress → ALB auto</text>
+
+<!-- NAMESPACE -->
+<rect x="308" y="230" width="840" height="316" rx="7" fill="rgba(139,92,246,0.04)" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="4,2"/>
+<text x="728" y="244" text-anchor="middle" font-size="9" font-weight="700" fill="#6d28d9">namespace: como-vapp-dev</text>
+
+<!-- ── ROW 1: INFRASTRUCTURE TOOLS ── -->
+
+<!-- Ingress -->
+<rect x="322" y="252" width="130" height="48" rx="7" fill="white" stroke="#3b82f6" stroke-width="1.5"/>
+<text x="387" y="269" text-anchor="middle" font-size="8.5" font-weight="700" fill="#1d4ed8">Ingress</text>
+<text x="387" y="281" text-anchor="middle" font-size="7.5" fill="#2563eb">/orders → público</text>
+<text x="387" y="292" text-anchor="middle" font-size="7.5" fill="#6b7280">admin: port-fwd</text>
+
+<!-- ConfigMaps -->
+<rect x="462" y="252" width="118" height="48" rx="7" fill="white" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="521" y="269" text-anchor="middle" font-size="8.5" font-weight="700" fill="#374151">ConfigMaps</text>
+<text x="521" y="281" text-anchor="middle" font-size="7.5" fill="#6b7280">DynamoDB table</text>
+<text x="521" y="292" text-anchor="middle" font-size="7.5" fill="#6b7280">SQS queue URL</text>
+
+<!-- RBAC -->
+<rect x="590" y="252" width="118" height="48" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.5"/>
+<text x="649" y="269" text-anchor="middle" font-size="8.5" font-weight="700" fill="#854d0e">RBAC</text>
+<text x="649" y="281" text-anchor="middle" font-size="7.5" fill="#92400e">orders/admin/</text>
+<text x="649" y="292" text-anchor="middle" font-size="7.5" fill="#92400e">notifications -sa</text>
+
+<!-- Prometheus -->
+<rect x="718" y="252" width="110" height="48" rx="7" fill="#fff7ed" stroke="#f97316" stroke-width="1.5"/>
+<text x="773" y="269" text-anchor="middle" font-size="8.5" font-weight="700" fill="#c2410c">📡 Prometheus</text>
+<text x="773" y="281" text-anchor="middle" font-size="7.5" fill="#ea580c">kube-prometheus</text>
+<text x="773" y="292" text-anchor="middle" font-size="7.5" fill="#ea580c">-stack (Helm)</text>
+
+<!-- Grafana -->
+<rect x="838" y="252" width="100" height="48" rx="7" fill="#fff7ed" stroke="#f97316" stroke-width="1.5"/>
+<text x="888" y="269" text-anchor="middle" font-size="8.5" font-weight="700" fill="#c2410c">📈 Grafana</text>
+<text x="888" y="281" text-anchor="middle" font-size="7.5" fill="#ea580c">Dashboards</text>
+<text x="888" y="292" text-anchor="middle" font-size="7.5" fill="#ea580c">CPU·Lat·Err</text>
+
+<!-- Fluent Bit (outside namespace, inside EKS) -->
+<rect x="1165" y="252" width="130" height="48" rx="7" fill="#f0fdf4" stroke="#10b981" stroke-width="1.5"/>
+<text x="1230" y="267" text-anchor="middle" font-size="8.5" font-weight="700" fill="#065f46">Fluent Bit</text>
+<text x="1230" y="279" text-anchor="middle" font-size="7.5" fill="#059669">DaemonSet</text>
+<text x="1230" y="291" text-anchor="middle" font-size="7.5" fill="#059669">→ CloudWatch Logs</text>
+
+<!-- Secrets CSI (outside namespace) -->
+<rect x="1165" y="312" width="130" height="48" rx="7" fill="#fdf4ff" stroke="#a855f7" stroke-width="1.5"/>
+<text x="1230" y="327" text-anchor="middle" font-size="8.5" font-weight="700" fill="#7e22ce">Secrets Store</text>
+<text x="1230" y="339" text-anchor="middle" font-size="7.5" fill="#9333ea">CSI Driver</text>
+<text x="1230" y="351" text-anchor="middle" font-size="7.5" fill="#9333ea">/mnt/secrets/</text>
+
+<!-- ── ROW 2: SERVICES ── -->
+
+<!-- orders-service -->
+<rect x="322" y="314" width="155" height="68" rx="7" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+<text x="399" y="331" text-anchor="middle" font-size="9" font-weight="700" fill="#1d4ed8">orders-service</text>
+<text x="399" y="343" text-anchor="middle" font-size="8" fill="#2563eb">.NET · :8080 · ×2</text>
+<text x="399" y="355" text-anchor="middle" font-size="7.5" fill="#374151">100m/250m CPU</text>
+<text x="399" y="366" text-anchor="middle" font-size="7.5" fill="#374151">128/256Mi RAM</text>
+<text x="399" y="375" text-anchor="middle" font-size="7" fill="#059669">✓ Liveness · Readiness</text>
+
+<!-- admin-service -->
+<rect x="490" y="314" width="155" height="68" rx="7" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+<text x="567" y="331" text-anchor="middle" font-size="9" font-weight="700" fill="#1d4ed8">admin-service</text>
+<text x="567" y="343" text-anchor="middle" font-size="8" fill="#2563eb">Kotlin · :8081 · ×2</text>
+<text x="567" y="355" text-anchor="middle" font-size="7.5" fill="#374151">100m/250m CPU</text>
+<text x="567" y="366" text-anchor="middle" font-size="7.5" fill="#374151">192/312Mi RAM</text>
+<text x="567" y="375" text-anchor="middle" font-size="7" fill="#059669">✓ Liveness · Readiness</text>
+
+<!-- notifications-service -->
+<rect x="658" y="314" width="165" height="68" rx="7" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+<text x="740" y="331" text-anchor="middle" font-size="9" font-weight="700" fill="#1d4ed8">notifications-svc</text>
+<text x="740" y="343" text-anchor="middle" font-size="8" fill="#2563eb">Python · :8082 · ×2</text>
+<text x="740" y="355" text-anchor="middle" font-size="7.5" fill="#374151">50m/150m CPU</text>
+<text x="740" y="366" text-anchor="middle" font-size="7.5" fill="#374151">64/128Mi RAM</text>
+<text x="740" y="375" text-anchor="middle" font-size="7" fill="#059669">✓ Liveness · Readiness</text>
+
+<!-- securityContext box (shared) -->
+<rect x="835" y="314" width="290" height="68" rx="7" fill="#fdf4ff" stroke="#a855f7" stroke-width="1.5"/>
+<text x="980" y="330" text-anchor="middle" font-size="9" font-weight="700" fill="#7e22ce">securityContext (todos los pods)</text>
+<text x="980" y="342" text-anchor="middle" font-size="8" fill="#9333ea">runAsUser: 1001 · readOnlyRootFilesystem: true</text>
+<text x="980" y="354" text-anchor="middle" font-size="8" fill="#9333ea">allowPrivilegeEscalation: false</text>
+<text x="980" y="366" text-anchor="middle" font-size="8" fill="#9333ea">capabilities: drop ALL · Seccomp: RuntimeDefault</text>
+<text x="980" y="375" text-anchor="middle" font-size="7.5" fill="#6b7280">topologySpreadConstraints: spread AZs</text>
+
+<!-- ── ROW 3: NOTES ── -->
+<rect x="322" y="396" width="700" height="24" rx="5" fill="#f0fdf4" stroke="#10b981" stroke-width="1"/>
+<text x="672" y="412" text-anchor="middle" font-size="8.5" fill="#065f46" font-weight="600">Rolling Update (maxUnavailable:1, maxSurge:1) · RollingUpdate strategy · emptyDir /tmp</text>
+
+<!-- ECR row -->
+<rect x="293" y="428" width="620" height="46" rx="7" fill="white" stroke="#10b981" stroke-width="1.5"/>
+<text x="603" y="443" text-anchor="middle" font-size="9" font-weight="700" fill="#065f46">📦 Amazon ECR — 4 repos (IMMUTABLE · scan_on_push · AES256)</text>
+<text x="410" y="456" text-anchor="middle" font-size="8" fill="#374151">orders-service</text>
+<text x="530" y="456" text-anchor="middle" font-size="8" fill="#374151">admin-service</text>
+<text x="655" y="456" text-anchor="middle" font-size="8" fill="#374151">notifications-service</text>
+<text x="790" y="456" text-anchor="middle" font-size="8" fill="#374151">frontend</text>
+
+<!-- AWS Config rule box -->
+<rect x="935" y="428" width="555" height="46" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.5"/>
+<text x="1212" y="443" text-anchor="middle" font-size="9" font-weight="700" fill="#854d0e">📋 AWS Config — Compliance Rules</text>
+<text x="1212" y="456" text-anchor="middle" font-size="8" fill="#92400e">restricted-ssh · vpc-flow-logs · encrypted-volumes · dynamodb-encryption</text>
+
+<!-- Bottom private subnet: IAM + SonarQube + Trivy -->
+<rect x="293" y="484" width="620" height="34" rx="6" fill="white" stroke="#d1d5db" stroke-width="1"/>
+<text x="603" y="501" text-anchor="middle" font-size="8.5" fill="#374151" font-weight="600">🔑 IAM LabRole (Academy) · IRSA preparado por ServiceAccount · KMS-managed keys</text>
+
+<rect x="935" y="484" width="555" height="34" rx="6" fill="white" stroke="#d1d5db" stroke-width="1"/>
+<text x="1212" y="498" text-anchor="middle" font-size="8.5" fill="#374151" font-weight="600">🔍 SonarQube (código fuente) · Trivy (imágenes) → pipeline bloquea si CRITICAL</text>
+
+<!-- ══════════════════════════════════════════════════════════
+     MANAGED SERVICES ROW
+══════════════════════════════════════════════════════════ -->
+<text x="780" y="726" text-anchor="middle" font-size="9" font-weight="700" fill="#94a3b8" letter-spacing="2">AWS MANAGED SERVICES — SERVERLESS / FULLY MANAGED</text>
+
+<!-- DynamoDB -->
+<rect x="20" y="732" width="148" height="78" rx="8" fill="#fff7ed" stroke="#f97316" stroke-width="1.5"/>
+<text x="94" y="750" text-anchor="middle" font-size="14">🗄️</text>
+<text x="94" y="763" text-anchor="middle" font-size="9" font-weight="700" fill="#c2410c">DynamoDB</text>
+<text x="94" y="775" text-anchor="middle" font-size="8" fill="#ea580c">orders table</text>
+<text x="94" y="786" text-anchor="middle" font-size="8" fill="#ea580c">PAY_PER_REQUEST</text>
+<text x="94" y="797" text-anchor="middle" font-size="7.5" fill="#6b7280">SSE · PITR · TTL</text>
+
+<!-- DynamoDB Streams -->
+<rect x="175" y="732" width="120" height="36" rx="6" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
+<text x="235" y="746" text-anchor="middle" font-size="8.5" font-weight="700" fill="#92400e">DynamoDB Streams</text>
+<text x="235" y="758" text-anchor="middle" font-size="7.5" fill="#b45309">NEW_AND_OLD_IMAGES</text>
+
+<!-- Lambda -->
+<rect x="175" y="774" width="120" height="36" rx="6" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.5"/>
+<text x="235" y="789" text-anchor="middle" font-size="8.5" font-weight="700" fill="#6d28d9">λ stream-processor</text>
+<text x="235" y="801" text-anchor="middle" font-size="7.5" fill="#7c3aed">Python 3.12 · 128MB · 30s</text>
+
+<!-- SQS -->
+<rect x="305" y="732" width="138" height="78" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
+<text x="374" y="750" text-anchor="middle" font-size="14">📬</text>
+<text x="374" y="763" text-anchor="middle" font-size="9" font-weight="700" fill="#92400e">SQS Queue</text>
+<text x="374" y="775" text-anchor="middle" font-size="8" fill="#b45309">notifications</text>
+<text x="374" y="786" text-anchor="middle" font-size="8" fill="#b45309">SSE-SQS · LP 20s</text>
+<text x="374" y="797" text-anchor="middle" font-size="7.5" fill="#6b7280">maxReceive: 3 → DLQ</text>
+
+<!-- DLQ -->
+<rect x="453" y="732" width="120" height="78" rx="8" fill="#fee2e2" stroke="#ef4444" stroke-width="1.5"/>
+<text x="513" y="750" text-anchor="middle" font-size="14">☠️</text>
+<text x="513" y="763" text-anchor="middle" font-size="9" font-weight="700" fill="#b91c1c">SQS DLQ</text>
+<text x="513" y="775" text-anchor="middle" font-size="8" fill="#dc2626">Dead Letter Queue</text>
+<text x="513" y="786" text-anchor="middle" font-size="8" fill="#dc2626">14 días retención</text>
+<text x="513" y="797" text-anchor="middle" font-size="7.5" fill="#6b7280">alarm: depth > 0</text>
+
+<!-- SES -->
+<rect x="583" y="732" width="130" height="78" rx="8" fill="#fdf4ff" stroke="#a855f7" stroke-width="1.5"/>
+<text x="648" y="750" text-anchor="middle" font-size="14">✉️</text>
+<text x="648" y="763" text-anchor="middle" font-size="9" font-weight="700" fill="#7e22ce">Amazon SES</text>
+<text x="648" y="775" text-anchor="middle" font-size="8" fill="#9333ea">verified identity</text>
+<text x="648" y="786" text-anchor="middle" font-size="8" fill="#9333ea">correo transaccional</text>
+<text x="648" y="797" text-anchor="middle" font-size="7.5" fill="#6b7280">boto3 SDK</text>
+
+<!-- S3 Frontend -->
+<rect x="723" y="732" width="130" height="78" rx="8" fill="#f0fdf4" stroke="#10b981" stroke-width="1.5"/>
+<text x="788" y="750" text-anchor="middle" font-size="14">🪣</text>
+<text x="788" y="763" text-anchor="middle" font-size="9" font-weight="700" fill="#065f46">S3 Frontend</text>
+<text x="788" y="775" text-anchor="middle" font-size="8" fill="#059669">Static Website</text>
+<text x="788" y="786" text-anchor="middle" font-size="8" fill="#059669">React SPA · public</text>
+<text x="788" y="797" text-anchor="middle" font-size="7.5" fill="#6b7280">SSE-S3 (AES256)</text>
+
+<!-- S3 Config -->
+<rect x="863" y="732" width="130" height="78" rx="8" fill="#f0fdf4" stroke="#10b981" stroke-width="1.5"/>
+<text x="928" y="750" text-anchor="middle" font-size="14">🪣</text>
+<text x="928" y="763" text-anchor="middle" font-size="9" font-weight="700" fill="#065f46">S3 Config</text>
+<text x="928" y="775" text-anchor="middle" font-size="8" fill="#059669">Config Recordings</text>
+<text x="928" y="786" text-anchor="middle" font-size="8" fill="#059669">private · no-public</text>
+<text x="928" y="797" text-anchor="middle" font-size="7.5" fill="#6b7280">SSE-S3 (AES256)</text>
+
+<!-- CloudWatch -->
+<rect x="1003" y="732" width="148" height="78" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+<text x="1077" y="750" text-anchor="middle" font-size="14">📊</text>
+<text x="1077" y="763" text-anchor="middle" font-size="9" font-weight="700" fill="#1d4ed8">CloudWatch</text>
+<text x="1077" y="775" text-anchor="middle" font-size="8" fill="#2563eb">Log Groups (30d)</text>
+<text x="1077" y="786" text-anchor="middle" font-size="8" fill="#2563eb">3 Alarms activas</text>
+<text x="1077" y="797" text-anchor="middle" font-size="7.5" fill="#6b7280">DLQ · Queue · Lambda</text>
+
+<!-- AWS Config -->
+<rect x="1161" y="732" width="142" height="78" rx="8" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.5"/>
+<text x="1232" y="750" text-anchor="middle" font-size="14">⚖️</text>
+<text x="1232" y="763" text-anchor="middle" font-size="9" font-weight="700" fill="#92400e">AWS Config</text>
+<text x="1232" y="775" text-anchor="middle" font-size="8" fill="#b45309">Compliance Recorder</text>
+<text x="1232" y="786" text-anchor="middle" font-size="8" fill="#b45309">4 reglas activas</text>
+<text x="1232" y="797" text-anchor="middle" font-size="7.5" fill="#6b7280">SNS alert if !Compliant</text>
+
+<!-- IAM -->
+<rect x="1313" y="732" width="130" height="78" rx="8" fill="#fdf4ff" stroke="#a855f7" stroke-width="1.5"/>
+<text x="1378" y="750" text-anchor="middle" font-size="14">🔑</text>
+<text x="1378" y="763" text-anchor="middle" font-size="9" font-weight="700" fill="#7e22ce">IAM LabRole</text>
+<text x="1378" y="775" text-anchor="middle" font-size="8" fill="#9333ea">Lambda + EKS nodes</text>
+<text x="1378" y="786" text-anchor="middle" font-size="8" fill="#9333ea">Academy: LabRole</text>
+<text x="1378" y="797" text-anchor="middle" font-size="7.5" fill="#6b7280">Prod: IRSA por pod</text>
+
+<!-- KMS -->
+<rect x="1453" y="732" width="90" height="78" rx="8" fill="#fdf4ff" stroke="#a855f7" stroke-width="1"/>
+<text x="1498" y="750" text-anchor="middle" font-size="13">🔐</text>
+<text x="1498" y="763" text-anchor="middle" font-size="8.5" font-weight="700" fill="#7e22ce">KMS</text>
+<text x="1498" y="775" text-anchor="middle" font-size="7.5" fill="#9333ea">DynamoDB</text>
+<text x="1498" y="786" text-anchor="middle" font-size="7.5" fill="#9333ea">SQS (SSE)</text>
+<text x="1498" y="797" text-anchor="middle" font-size="7" fill="#6b7280">managed key</text>
+
+<!-- ══════════════════════════════════════════════════════════
+     FLOW ARROWS
+══════════════════════════════════════════════════════════ -->
+
+<!-- 1. User → ALB (HTTPS) -->
+<path d="M 95 108 L 144 270" stroke="#3b82f6" stroke-width="2" fill="none" marker-end="url(#arr-b)"/>
+<text x="90" y="190" font-size="8" fill="#3b82f6" font-weight="600">HTTPS</text>
+
+<!-- ALB → orders-service -->
+<path d="M 234 295 Q 280 295 322 348" stroke="#3b82f6" stroke-width="2" fill="none" marker-end="url(#arr-b)"/>
+<text x="265" y="282" font-size="8" fill="#3b82f6">:30000+</text>
+
+<!-- orders/admin → DynamoDB (via VPC Endpoint) -->
+<path d="M 399 382 L 399 420 L 94 420 L 94 420" stroke="#f97316" stroke-width="1.5" fill="none" stroke-dasharray="5,3"/>
+<path d="M 94 420 L 94 732" stroke="#f97316" stroke-width="1.5" fill="none" stroke-dasharray="5,3" marker-end="url(#arr-o)"/>
+<text x="200" y="415" font-size="7.5" fill="#f97316">→ DynamoDB (VPC Endpoint)</text>
+
+<!-- admin same path -->
+<path d="M 567 382 L 567 420" stroke="#f97316" stroke-width="1" fill="none" stroke-dasharray="3,2"/>
+
+<!-- DynamoDB Streams → Lambda -->
+<line x1="168" y1="750" x2="175" y2="750" stroke="#8b5cf6" stroke-width="2" marker-end="url(#arr-p)"/>
+
+<!-- Lambda → SQS -->
+<path d="M 295 794 L 305 785" stroke="#8b5cf6" stroke-width="2" fill="none" marker-end="url(#arr-p)"/>
+
+<!-- SQS → DLQ (redrive) -->
+<line x1="443" y1="771" x2="453" y2="771" stroke="#ef4444" stroke-width="1.5" marker-end="url(#arr)" stroke-dasharray="3,2"/>
+
+<!-- SQS ← notifications-service (polling) -->
+<path d="M 374 732 L 374 690 L 740 690 L 740 382" stroke="#f97316" stroke-width="1.5" fill="none" stroke-dasharray="5,3" marker-end="url(#arr-o)"/>
+<text x="560" y="684" font-size="7.5" fill="#f97316">polling SQS</text>
+
+<!-- notifications → SES -->
+<path d="M 740 382 L 740 690 L 648 690 L 648 732" stroke="#a855f7" stroke-width="1.5" fill="none" marker-end="url(#arr-p)"/>
+
+<!-- SES → Email user -->
+<path d="M 713 771 Q 1100 820 1465 820 L 1465 108" stroke="#a855f7" stroke-width="1.5" fill="none" stroke-dasharray="4,3" marker-end="url(#arr-p)"/>
+<text x="1100" y="838" font-size="8" fill="#a855f7">email transaccional</text>
+
+<!-- Fluent Bit → CloudWatch -->
+<path d="M 1230 300 L 1230 660 L 1077 660 L 1077 732" stroke="#10b981" stroke-width="1.5" fill="none" stroke-dasharray="3,2" marker-end="url(#arr-g)"/>
+<text x="1160" y="654" font-size="7.5" fill="#10b981">JSON logs</text>
+
+<!-- ECR → EKS (image pull) -->
+<path d="M 540 474 L 540 428" stroke="#10b981" stroke-width="1.5" fill="none" stroke-dasharray="3,2" marker-end="url(#arr-g)"/>
+<text x="555" y="452" font-size="7.5" fill="#059669">pull</text>
+
+<!-- S3 Frontend → User -->
+<path d="M 788 732 L 788 660 L 400 660 L 95 660 L 95 108" stroke="#10b981" stroke-width="1" fill="none" stroke-dasharray="3,2" marker-end="url(#arr-g)"/>
+
+<!-- NAT GW egress -->
+<line x1="144" y1="372" x2="144" y2="260" stroke="#10b981" stroke-width="1" fill="none" marker-end="url(#arr-g)" stroke-dasharray="3,2"/>
+
+<!-- ══════════════════════════════════════════════════════════
+     LEGEND
+══════════════════════════════════════════════════════════ -->
+<rect x="12" y="820" width="1536" height="28" rx="5" fill="#f1f5f9"/>
+<line x1="30" y1="834" x2="65" y2="834" stroke="#3b82f6" stroke-width="2" marker-end="url(#arr-b)"/>
+<text x="70" y="838" font-size="8.5" fill="#374151">HTTP/S sync</text>
+<line x1="160" y1="834" x2="195" y2="834" stroke="#f97316" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arr-o)"/>
+<text x="200" y="838" font-size="8.5" fill="#374151">DynamoDB/event async</text>
+<line x1="360" y1="834" x2="395" y2="834" stroke="#a855f7" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arr-p)"/>
+<text x="400" y="838" font-size="8.5" fill="#374151">notif./email</text>
+<line x1="490" y1="834" x2="525" y2="834" stroke="#10b981" stroke-width="2" stroke-dasharray="3,2" marker-end="url(#arr-g)"/>
+<text x="530" y="838" font-size="8.5" fill="#374151">logs/imágenes</text>
+<text x="860" y="838" text-anchor="middle" font-size="8.5" fill="#374151">🟠 Data/Events  🔵 Compute/Network  🟣 Secrets/IAM  🟢 Storage  🟡 Compliance</text>
+<text x="1330" y="838" text-anchor="middle" font-size="8" fill="#94a3b8">Terraform ~35-40 recursos · eksctl EKS · kubectl manifests</text>
+
+</svg>
+</div>
+</body>
+</html>

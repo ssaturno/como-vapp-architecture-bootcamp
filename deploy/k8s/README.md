@@ -10,7 +10,7 @@
 |---|---|
 | AWS CLI | 2.x |
 | eksctl | 0.180+ |
-| kubectl | 1.29+ |
+| kubectl | 1.35+ |
 | helm | 3.x |
 
 ```bash
@@ -26,7 +26,7 @@ aws sts get-caller-identity   # verificar acceso
 eksctl create cluster \
   --name como-vapp-eks \
   --region us-east-1 \
-  --version 1.29 \
+  --version 1.35 \
   --vpc-id $(terraform -chdir=../../infra/terraform output -raw vpc_id) \
   --vpc-private-subnets $(terraform -chdir=../../infra/terraform output -json private_subnet_ids | jq -r 'join(",")') \
   --vpc-public-subnets  $(terraform -chdir=../../infra/terraform output -json public_subnet_ids  | jq -r 'join(",")') \

@@ -34,12 +34,61 @@ Esta guía cubre el camino completo desde cero hasta un sistema funcionando en A
 | AWS CLI | v2.x | `https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html` |
 | Terraform | >= 1.5 | `https://developer.hashicorp.com/terraform/install` |
 | eksctl | >= 0.180 | `https://eksctl.io/installation/` |
-| kubectl | >= 1.29 | `https://kubernetes.io/docs/tasks/tools/` |
+| kubectl | >= 1.35 | `https://kubernetes.io/docs/tasks/tools/` |
 | helm | >= 3.x | `https://helm.sh/docs/intro/install/` |
 | Docker Desktop | >= 24 | `https://www.docker.com/products/docker-desktop/` |
 | jq | cualquier | `https://jqlang.github.io/jq/download/` |
 
 ### Configurar credenciales AWS Academy
+
+AWS Academy genera credenciales temporales con `aws_session_token` que expiran al reiniciar el lab.
+
+#### Opción A — Perfil dedicado `academy` (recomendado si ya tienes otra cuenta AWS configurada)
+
+Esto evita sobreescribir tu perfil `[default]` existente.
+
+**1. Obtener credenciales:** Ir a AWS Academy → Launch AWS Academy Learner Lab → "AWS Details" → copiar el bloque de credenciales (viene con header `[default]`).
+
+**2. Abrir el archivo de credenciales:** `C:\Users\<tu-usuario>\.aws\credentials`
+
+**3. Pegar al final del archivo**, cambiando `[default]` por `[academy]`:
+
+```ini
+[academy]
+aws_access_key_id=ASIA44XXXXXXXXXXXXXXXXX
+aws_secret_access_key=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+aws_session_token=IQoJb3JpZ2lu...  (token completo)
+```
+
+**4. Agregar el perfil en** `C:\Users\<tu-usuario>\.aws\config`:
+
+```ini
+[profile academy]
+region = us-east-1
+```
+
+**5. Activar el perfil para toda la sesión** (hacer esto cada vez que abras una terminal nueva):
+
+```powershell
+# PowerShell (Windows)
+$env:AWS_PROFILE = "academy"
+
+# bash / CloudShell / macOS
+export AWS_PROFILE=academy
+```
+
+**6. Verificar acceso:**
+
+```bash
+aws sts get-caller-identity
+# Debe mostrar tu Account ID y el ARN del LabRole
+```
+
+> Con `AWS_PROFILE` activo, todos los comandos `aws`, `terraform` y `eksctl` usan automáticamente el perfil `academy` sin necesidad de agregar `--profile academy` en cada uno.
+
+---
+
+#### Opción B — Perfil default (si no tienes otra cuenta AWS)
 
 ```bash
 # Abrir AWS Academy → Launch AWS Academy Learner Lab
@@ -56,7 +105,9 @@ aws sts get-caller-identity
 # Debe mostrar tu Account ID y el ARN del LabRole
 ```
 
-> **Importante:** Las credenciales de AWS Academy expiran cada vez que se reinicia el lab. Repetir `aws configure` si los comandos devuelven `InvalidClientTokenId`.
+---
+
+> **Importante:** Las credenciales de AWS Academy expiran cada vez que se reinicia el lab. Ver la sección de [Troubleshooting — Credenciales expiradas](#credenciales-aws-academy-expiradas) para renovarlas.
 
 ### Verificar herramientas
 
@@ -72,27 +123,23 @@ docker info           # Docker Desktop debe estar corriendo
 
 ## 2. Verificar email en SES
 
-AWS Academy usa SES en **modo sandbox**: solo se pueden enviar y recibir emails a direcciones verificadas.
+> **AWS Academy — SES no disponible**
+>
+> El LabRole de AWS Academy **no tiene permisos para SES** (`ses:VerifyEmailIdentity` está bloqueado tanto por CLI como por consola). Este paso no se puede completar en un lab de Academy.
+>
+> **Impacto:** El servicio de notificaciones recibe y procesa mensajes desde SQS normalmente, pero no enviará emails reales. El resto de la arquitectura (EKS, DynamoDB, SQS, Lambda, AWS Config, S3) funciona sin restricciones.
+>
+> En una cuenta AWS real (fuera de Academy), los comandos serían:
+>
+> ```powershell
+> aws ses verify-email-identity --email-address samarissaturno@gmail.com --region us-east-1
+>
+> # Confirmar el link que llega al email, luego verificar:
+> aws ses get-identity-verification-attributes --identities samarissaturno@gmail.com --region us-east-1
+> # "VerificationStatus": "Success"
+> ```
 
-```bash
-# Verificar el email que usarás como remitente de notificaciones
-aws ses verify-email-identity \
-  --email-address TU_EMAIL@gmail.com \
-  --region us-east-1
-```
-
-- Ir a la bandeja de entrada de `TU_EMAIL@gmail.com`
-- Hacer click en el link de confirmación de Amazon SES
-- Verificar que el estado sea "Verified":
-
-```bash
-aws ses get-identity-verification-attributes \
-  --identities TU_EMAIL@gmail.com \
-  --region us-east-1
-# "VerificationStatus": "Success"
-```
-
-> Guardar este email — lo necesitarás en el paso 3 como variable `ses_verified_sender`.
+**Continuar directamente al paso 3.**
 
 ---
 
@@ -115,7 +162,7 @@ terraform init
 
 ```bash
 terraform plan \
-  -var="ses_verified_sender=TU_EMAIL@gmail.com" \
+  -var="ses_verified_sender=samarissaturno@gmail.com" \
   -out=tfplan
 ```
 
@@ -209,38 +256,77 @@ aws configservice describe-config-rules \
 
 **Tiempo estimado: ~15–20 minutos** (EKS tarda en provisionar)
 
-> EKS NO se crea con Terraform en este proyecto. Se usa `eksctl` apuntando a la VPC que Terraform ya creó.
+> EKS NO se crea con Terraform en este proyecto (el LabRole de Academy tiene restricciones IAM). Se crea desde la consola de AWS apuntando a la VPC que Terraform ya creó.
 
-```bash
-eksctl create cluster \
-  --name como-vapp-eks \
-  --region us-east-1 \
-  --version 1.29 \
-  --vpc-id $TF_VPC_ID \
-  --vpc-private-subnets $TF_PRIVATE_SUBNETS \
-  --vpc-public-subnets $TF_PUBLIC_SUBNETS \
-  --nodegroup-name como-vapp-nodes \
-  --node-type t3.small \
-  --nodes 2 \
-  --nodes-min 2 \
-  --nodes-max 4 \
-  --managed \
-  --asg-access \
-  --full-ecr-access \
-  --node-security-groups $TF_NODES_SG
+### Concepto: Node Pool vs Servicio
+
+Un **Node Pool** (o Node Group) es un grupo de máquinas EC2. Los pods de todos los servicios se distribuyen entre esas máquinas — **no se necesita un node pool por servicio**.
+
+```
+Node Pool único (2× t3.small)
+├── Nodo 1 → pod: orders-service + pod: notifications-service
+└── Nodo 2 → pod: orders-service (réplica) + pod: admin-service
 ```
 
-> Este comando tarda entre 15 y 20 minutos. No cerrar la terminal.
+Múltiples node pools solo tienen sentido cuando hay requisitos de hardware muy distintos (GPU, alta memoria, spot instances). Para 3 microservicios ligeros, **un solo node pool es lo correcto**. El aislamiento entre servicios se logra con namespaces y resource limits.
 
-### Verificar que el clúster está listo
+> **AWS Academy — Auto Mode:** Al crear el clúster, **desactivar EKS Auto Mode**. Con Auto Mode activo, AWS elige instancias ARM (Graviton) que son incompatibles con imágenes Docker construidas en x86.
 
-```bash
-# Actualizar kubeconfig
+---
+
+### Paso 1 — Crear el control plane
+
+1. **AWS Console → EKS → Create cluster**
+2. Completar el formulario:
+
+| Campo | Valor |
+|---|---|
+| Name | `como-vapp-eks` |
+| Kubernetes version | `1.35` |
+| Cluster service role | `LabRole` |
+| **EKS Auto Mode** | **Desactivado** (seleccionar "Configure manually") |
+
+3. **Networking:**
+   - VPC: `vpc-01c2081877a103408` (creada por Terraform)
+   - Subnets: seleccionar las **4** (2 públicas + 2 privadas)
+   - Security group del clúster: dejar el que crea por defecto
+   - Cluster endpoint access: `Public and private`
+
+4. Click **Next → Next → Create**
+
+> Tarda ~10 minutos. Esperar hasta que el estado sea **Active**.
+
+---
+
+### Paso 2 — Agregar el Node Group
+
+Una vez el clúster esté **Active**, desde la tab **Compute → Add node group**:
+
+| Campo | Valor |
+|---|---|
+| Name | `como-vapp-nodes` |
+| Node IAM role | `LabRole` |
+| AMI type | `Amazon Linux 2` **(x86_64 — NO ARM)** |
+| Instance type | `t3.small` |
+| Disk size | `20 GB` |
+| Min size | `2` |
+| Desired size | `2` |
+| Max size | `4` |
+
+- **Subnets:** seleccionar **solo las 2 privadas** (`subnet-0ae8342a0d3da1f7a`, `subnet-0103e2f7c432c90aa`)
+- Click **Next → Next → Create**
+
+> Tarda ~5 minutos adicionales.
+
+---
+
+### Paso 3 — Conectar kubectl
+
+```powershell
 aws eks update-kubeconfig --name como-vapp-eks --region us-east-1
 
-# Verificar nodos
+# Verificar nodos (esperar hasta ver 2 en estado "Ready")
 kubectl get nodes
-# Deben aparecer 2 nodos en estado "Ready"
 
 # Verificar el clúster
 kubectl cluster-info
@@ -432,7 +518,7 @@ RESPONSE=$(curl -s -X POST http://$ALB_DNS/orders \
   -d '{
     "cliente": {
       "nombre": "Ana Torres",
-      "correo": "TU_EMAIL@gmail.com"
+      "correo": "samarissaturno@gmail.com"
     },
     "direccion": "Calle 123 # 45-67",
     "items": [
@@ -480,7 +566,7 @@ curl -s http://localhost:8082/notifications | jq .
 
 #### Paso 6 — Verificar email recibido
 
-- Abrir `TU_EMAIL@gmail.com`
+- Abrir `samarissaturno@gmail.com`
 - Buscar emails de Amazon SES con asunto `[Como Vapp] Tu pedido ... ahora está: EN_PROGRESO`
 
 #### Paso 7 — Verificar transición inválida (demo de validación)
@@ -536,7 +622,7 @@ aws dynamodb scan \
 curl -s -X POST http://$ALB_DNS/orders \
   -H "Content-Type: application/json" \
   -d '{
-    "cliente": {"nombre": "Carlos Ruiz", "correo": "TU_EMAIL@gmail.com"},
+    "cliente": {"nombre": "Carlos Ruiz", "correo": "samarissaturno@gmail.com"},
     "direccion": "Av. Siempreviva 742",
     "items": [{"producto": "Hamburgesa", "cantidad": 1, "valor": 18000}]
   }' | jq .idPedido
@@ -612,9 +698,15 @@ aws sqs list-queues
 
 ```bash
 # Síntoma: "ExpiredTokenException" o "InvalidClientTokenId"
-# Solución: Refresh en la consola Academy y volver a configurar
-aws configure
 ```
+
+**Si usas perfil `academy`** (Opción A): abrir `C:\Users\<tu-usuario>\.aws\credentials`, reemplazar las 3 líneas del bloque `[academy]` con las nuevas credenciales de AWS Details. Luego verificar:
+
+```bash
+aws sts get-caller-identity   # (con $env:AWS_PROFILE="academy" activo)
+```
+
+**Si usas perfil `default`** (Opción B): volver a ejecutar `aws configure` con los nuevos valores.
 
 ### Pods en estado `ImagePullBackOff`
 

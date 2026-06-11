@@ -44,7 +44,7 @@ spec:
       containers:
         - name: orders-service
           # Replace with actual ECR URI after: terraform output ecr_repository_urls
-          image: REEMPLAZAR_ECR_URI/como-vapp-dev-orders-service:0.1.0
+          image: 886240425170.dkr.ecr.us-east-1.amazonaws.com/como-vapp-dev-orders-service:0.1.0
           imagePullPolicy: Always
           ports:
             - name: http

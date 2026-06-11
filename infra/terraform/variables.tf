@@ -55,7 +55,7 @@ variable "eks_cluster_name" {
 variable "ses_verified_sender" {
   description = "Email address already verified in SES (sandbox). Replace before apply."
   type        = string
-  default     = "REEMPLAZAR@tu-dominio.com"
+  default     = "samarissaturno@gmail.com"
 }
 
 # ── DynamoDB ─────────────────────────────────────────────────────────────────

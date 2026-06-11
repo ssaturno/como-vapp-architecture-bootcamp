@@ -1,25 +1,793 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Como Vapp PoC</title>
+  <title>COMO VAPP? — Pedidos y rastreo</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 2rem; background: #f5f7fb; color: #1f2937; }
-    .card { background: white; border-radius: 12px; padding: 1.5rem; max-width: 700px; box-shadow: 0 10px 20px rgba(0,0,0,.08); }
-    h1 { margin-top: 0; }
-    code { background: #eef2ff; padding: .2rem .4rem; border-radius: 4px; }
+    :root {
+      --bg: #f9fafb;
+      --surface: #ffffff;
+      --border: #e5e7eb;
+      --text: #111827;
+      --muted: #6b7280;
+      --accent: #10b981;
+      --accent-dark: #059669;
+      --accent-light: #d1fae5;
+      --danger: #ef4444;
+      --step-done: #10b981;
+      --step-active: #3b82f6;
+      --step-pending: #d1d5db;
+      --radius: 12px;
+      --shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    nav {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .nav-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 60px;
+    }
+    .logo {
+      font-weight: 800;
+      font-size: 1.15rem;
+      letter-spacing: -0.5px;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .logo span { color: var(--accent); }
+    .nav-links { display: flex; gap: 4px; }
+    .nav-link {
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: .9rem;
+      font-weight: 500;
+      cursor: pointer;
+      color: var(--muted);
+      border: none;
+      background: none;
+      transition: background .15s, color .15s;
+    }
+    .nav-link:hover { background: var(--bg); color: var(--text); }
+    .nav-link.active { background: var(--accent-light); color: var(--accent-dark); }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    .hero {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 80px 24px 60px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: center;
+    }
+    @media (max-width: 768px) {
+      .hero { grid-template-columns: 1fr; gap: 40px; padding: 48px 20px 40px; }
+    }
+    .hero-tag {
+      display: inline-block;
+      background: var(--accent-light);
+      color: var(--accent-dark);
+      font-size: .78rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+      margin-bottom: 16px;
+    }
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -1px;
+      margin-bottom: 18px;
+    }
+    .hero h1 em { color: var(--accent); font-style: normal; }
+    .hero p {
+      color: var(--muted);
+      font-size: 1.05rem;
+      line-height: 1.65;
+      margin-bottom: 30px;
+      max-width: 440px;
+    }
+    .hero-btns { display: flex; gap: 12px; flex-wrap: wrap; }
+    .btn {
+      padding: 11px 22px;
+      border-radius: 9px;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: transform .1s, box-shadow .15s, opacity .15s;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(16,185,129,.35); }
+    .btn-primary:hover { background: var(--accent-dark); }
+    .btn-outline { background: #fff; color: var(--text); border: 1.5px solid var(--border); }
+    .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+    .features { display: flex; gap: 12px; margin-top: 32px; flex-wrap: wrap; }
+    .feat-badge {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: .82rem;
+    }
+    .feat-badge strong { display: block; font-weight: 700; margin-bottom: 2px; }
+    .feat-badge span { color: var(--muted); }
+
+    .order-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 22px;
+    }
+    .order-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 20px;
+    }
+    .order-label { font-size: .78rem; color: var(--muted); margin-bottom: 4px; }
+    .order-id { font-family: monospace; font-size: 1rem; font-weight: 700; }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: .78rem;
+      font-weight: 600;
+    }
+    .badge-blue { background: #dbeafe; color: #1d4ed8; }
+    .badge-green { background: var(--accent-light); color: var(--accent-dark); }
+    .badge-yellow { background: #fef3c7; color: #92400e; }
+    .badge-gray { background: #f3f4f6; color: #374151; }
+
+    .steps { display: flex; flex-direction: column; gap: 0; }
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      position: relative;
+    }
+    .step:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      left: 11px;
+      top: 24px;
+      width: 2px;
+      height: calc(100% + 4px);
+      background: var(--border);
+    }
+    .step.done::after { background: var(--step-done); }
+    .step-dot {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid var(--step-pending);
+      background: #fff;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1;
+    }
+    .step.done .step-dot { background: var(--step-done); border-color: var(--step-done); }
+    .step.active .step-dot { border-color: var(--step-active); background: var(--step-active); }
+    .step-dot svg { display: none; }
+    .step.done .step-dot svg { display: block; }
+    .step-body { padding: 2px 0 16px; }
+    .step-title { font-weight: 600; font-size: .9rem; }
+    .step-time { font-size: .78rem; color: var(--muted); margin-top: 2px; }
+
+    .section {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 60px 24px 80px;
+    }
+    .section-title {
+      font-size: 1.6rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+    }
+    .section-sub { color: var(--muted); margin-bottom: 32px; font-size: .95rem; }
+
+    .form-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 28px;
+    }
+    .form-section-title {
+      font-weight: 700;
+      font-size: .95rem;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-group.full { grid-column: 1 / -1; }
+    label { font-size: .84rem; font-weight: 600; color: #374151; }
+    input[type=text], input[type=email], textarea {
+      padding: 9px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: .93rem;
+      font-family: inherit;
+      background: #fff;
+      color: var(--text);
+      transition: border .15s;
+      outline: none;
+    }
+    input:focus, textarea:focus { border-color: var(--accent); }
+    textarea { resize: vertical; min-height: 72px; }
+
+    .products-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .products-header span { font-weight: 700; font-size: .95rem; }
+    .btn-sm {
+      padding: 6px 14px;
+      font-size: .83rem;
+      border-radius: 7px;
+      border: 1.5px solid var(--accent);
+      color: var(--accent);
+      background: none;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background .15s, color .15s;
+    }
+    .btn-sm:hover { background: var(--accent); color: #fff; }
+    .btn-sm.danger { border-color: var(--danger); color: var(--danger); }
+    .btn-sm.danger:hover { background: var(--danger); color: #fff; }
+
+    .products-table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+    .products-table th {
+      text-align: left;
+      font-size: .8rem;
+      font-weight: 600;
+      color: var(--muted);
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .products-table td { padding: 6px 8px; }
+    .products-table input[type=text],
+    .products-table input[type=number] { width: 100%; padding: 7px 10px; font-size: .88rem; }
+    .products-table input[type=number] { -moz-appearance: textfield; }
+    .products-table input[type=number]::-webkit-outer-spin-button,
+    .products-table input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+    .total-row {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 12px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .total-row .label { font-size: .88rem; color: var(--muted); }
+    .total-row .amount { font-size: 1.25rem; font-weight: 800; color: var(--accent-dark); }
+
+    .info-box {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: .82rem;
+      color: #065f46;
+      margin-bottom: 20px;
+    }
+    .form-actions { display: flex; justify-content: flex-end; margin-top: 20px; }
+
+    .toast {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: #111827;
+      color: #fff;
+      padding: 12px 22px;
+      border-radius: 10px;
+      font-size: .92rem;
+      font-weight: 500;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s, transform .25s;
+      z-index: 999;
+      white-space: nowrap;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.4);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: #fff;
+      border-radius: 16px;
+      padding: 36px;
+      max-width: 420px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,.2);
+      animation: pop .2s ease;
+    }
+    @keyframes pop { from { transform: scale(.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .modal-icon {
+      width: 64px; height: 64px;
+      background: var(--accent-light);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 20px;
+    }
+    .modal h2 { font-size: 1.4rem; font-weight: 800; margin-bottom: 8px; }
+    .modal p { color: var(--muted); font-size: .95rem; margin-bottom: 20px; }
+    .modal .order-id-big {
+      font-family: monospace;
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: var(--accent-dark);
+      background: var(--accent-light);
+      padding: 10px 20px;
+      border-radius: 8px;
+      display: inline-block;
+      margin-bottom: 24px;
+      letter-spacing: 1px;
+    }
+    .modal-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+    .track-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 28px;
+      margin-bottom: 24px;
+    }
+    .track-input-row { display: flex; gap: 10px; }
+    .track-input-row input { flex: 1; }
+    .track-result { margin-top: 24px; }
+    .track-result-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
+    .track-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .track-meta-item .label { font-size: .78rem; color: var(--muted); margin-bottom: 3px; }
+    .track-meta-item .value { font-size: .95rem; font-weight: 600; }
+    .empty-state { text-align: center; padding: 48px 20px; color: var(--muted); }
+    .empty-state .icon { font-size: 2.5rem; margin-bottom: 12px; }
+    .empty-state p { font-size: .95rem; }
+
+    .history-list { display: flex; flex-direction: column; gap: 12px; }
+    .history-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .history-item:hover { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(16,185,129,.08); }
+    .history-item-left .id { font-family: monospace; font-weight: 700; font-size: 1rem; }
+    .history-item-left .name { font-size: .85rem; color: var(--muted); margin-top: 3px; }
+    .history-item-right { text-align: right; }
+    .history-item-right .date { font-size: .82rem; color: var(--muted); margin-top: 4px; }
+
+    footer {
+      border-top: 1px solid var(--border);
+      text-align: center;
+      padding: 28px 24px;
+      font-size: .85rem;
+      color: var(--muted);
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>Como Vapp - PoC Local</h1>
-    <p>Frontend placeholder para la demo. Endpoints backend:</p>
-    <ul>
-      <li><code>http://localhost:8080/health</code> (orders)</li>
-      <li><code>http://localhost:8081/health</code> (admin)</li>
-      <li><code>http://localhost:8082/health</code> (notifications)</li>
-    </ul>
+
+<nav>
+  <div class="nav-inner">
+    <div class="logo" onclick="navigate('home')">COMO <span>VAPP?</span></div>
+    <div class="nav-links">
+      <button class="nav-link active" id="nav-home" onclick="navigate('home')">Crear pedido</button>
+      <button class="nav-link" id="nav-seguimiento" onclick="navigate('seguimiento')">Seguimiento</button>
+      <button class="nav-link" id="nav-historial" onclick="navigate('historial')">Historial</button>
+    </div>
   </div>
+</nav>
+
+<!-- HOME -->
+<div class="page active" id="page-home">
+  <div class="hero">
+    <div>
+      <div class="hero-tag">Pedidos confiables, sin complicaciones</div>
+      <h1>Pide, rastrea y recibe con <em>tranquilidad.</em></h1>
+      <p>En COMO VAPP? tu pedido está siempre acompañado. Crea una orden en segundos, comparte el ID y sigue cada paso en tiempo real.</p>
+      <div class="hero-btns">
+        <button class="btn btn-primary" onclick="scrollToForm()">Crear un pedido</button>
+        <button class="btn btn-outline" onclick="navigate('seguimiento')">Rastrear un pedido</button>
+      </div>
+      <div class="features">
+        <div class="feat-badge"><strong>En segundos</strong><span>Registro ágil</span></div>
+        <div class="feat-badge"><strong>Trazabilidad</strong><span>Paso a paso</span></div>
+        <div class="feat-badge"><strong>Confianza</strong><span>Datos seguros</span></div>
+      </div>
+    </div>
+    <div class="order-card">
+      <div class="order-card-header">
+        <div>
+          <div class="order-label">Pedido</div>
+          <div class="order-id">CV-K8A2P4731</div>
+        </div>
+        <span class="badge badge-blue">En camino</span>
+      </div>
+      <div class="steps">
+        <div class="step done">
+          <div class="step-dot"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="step-body"><div class="step-title">Recibido</div><div class="step-time">10:02</div></div>
+        </div>
+        <div class="step done">
+          <div class="step-dot"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="step-body"><div class="step-title">En preparación</div><div class="step-time">10:14</div></div>
+        </div>
+        <div class="step active">
+          <div class="step-dot"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="step-body"><div class="step-title">En camino</div><div class="step-time">10:31</div></div>
+        </div>
+        <div class="step">
+          <div class="step-dot"></div>
+          <div class="step-body"><div class="step-title">Entregado</div><div class="step-time" style="color:#d1d5db">—</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" id="crear">
+    <h2 class="section-title">Crear un pedido</h2>
+    <p class="section-sub">Cuéntanos qué necesitas y a dónde lo enviamos.</p>
+    <div class="form-card">
+      <div class="form-section-title">Datos del pedido</div>
+      <div class="info-box">Toda la información se guarda localmente en este navegador (modo demo).</div>
+      <form id="order-form" onsubmit="submitOrder(event)">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="cliente">Nombre del cliente</label>
+            <input type="text" id="cliente" placeholder="María García" required />
+          </div>
+          <div class="form-group">
+            <label for="correo">Correo</label>
+            <input type="email" id="correo" placeholder="maria@email.com" required />
+          </div>
+          <div class="form-group full">
+            <label for="direccion">Dirección de entrega</label>
+            <input type="text" id="direccion" placeholder="Calle 10 #5-20, Bogotá" required />
+          </div>
+        </div>
+        <div class="products-header">
+          <span>Productos</span>
+          <button type="button" class="btn-sm" onclick="addProductRow()">+ Agregar</button>
+        </div>
+        <table class="products-table">
+          <thead>
+            <tr>
+              <th style="width:45%">Producto</th>
+              <th style="width:15%">Cantidad</th>
+              <th style="width:25%">Valor unitario</th>
+              <th style="width:15%"></th>
+            </tr>
+          </thead>
+          <tbody id="products-body"></tbody>
+        </table>
+        <div class="total-row">
+          <span class="label">Total estimado</span>
+          <span class="amount" id="total-display">$ 0</span>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Crear pedido</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- SEGUIMIENTO -->
+<div class="page" id="page-seguimiento">
+  <div class="section">
+    <h2 class="section-title">Rastrear pedido</h2>
+    <p class="section-sub">Ingresa el ID de tu pedido para ver su estado actual.</p>
+    <div class="track-box">
+      <div class="track-input-row">
+        <input type="text" id="track-input" placeholder="CV-K8A2P4731" style="text-transform:uppercase"
+          oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')trackOrder()" />
+        <button class="btn btn-primary" onclick="trackOrder()">Buscar</button>
+      </div>
+      <div id="track-result" class="track-result"></div>
+    </div>
+  </div>
+</div>
+
+<!-- HISTORIAL -->
+<div class="page" id="page-historial">
+  <div class="section">
+    <h2 class="section-title">Historial de pedidos</h2>
+    <p class="section-sub">Todos los pedidos creados en este navegador.</p>
+    <div id="history-container"></div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-icon">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+        <path d="M6 16l7 7 13-13" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <h2>¡Pedido creado!</h2>
+    <p>Tu pedido fue registrado exitosamente. Guarda este ID para rastrear tu envío.</p>
+    <div class="order-id-big" id="modal-order-id">CV-XXXXXXX</div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="copyOrderId()">Copiar ID</button>
+      <button class="btn btn-primary" onclick="goToTracking()">Ver seguimiento</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<footer>© 2026 COMO VAPP? · Pedidos con cariño.</footer>
+
+<script>
+  const STORAGE_KEY = 'como_vapp_orders';
+  let lastCreatedId = null;
+  const STATUSES = ['Recibido', 'En preparación', 'En camino', 'Entregado'];
+  const STATUS_BADGES = {
+    'Recibido': 'badge-gray',
+    'En preparación': 'badge-yellow',
+    'En camino': 'badge-blue',
+    'Entregado': 'badge-green',
+  };
+
+  function getOrders() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+    catch { return []; }
+  }
+  function saveOrders(orders) { localStorage.setItem(STORAGE_KEY, JSON.stringify(orders)); }
+
+  function genId() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let id = 'CV-';
+    for (let i = 0; i < 7; i++) id += chars[Math.floor(Math.random() * chars.length)];
+    return id;
+  }
+
+  function navigate(page) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+    document.getElementById('page-' + (page === 'home' ? 'home' : page)).classList.add('active');
+    document.getElementById(page === 'home' ? 'nav-home' : 'nav-' + page).classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (page === 'historial') renderHistory();
+  }
+
+  function scrollToForm() {
+    navigate('home');
+    setTimeout(() => document.getElementById('crear').scrollIntoView({ behavior: 'smooth' }), 50);
+  }
+
+  let rowCount = 0;
+  function addProductRow() {
+    rowCount++;
+    const tbody = document.getElementById('products-body');
+    const tr = document.createElement('tr');
+    tr.id = 'row-' + rowCount;
+    tr.innerHTML = `
+      <td><input type="text" placeholder="Ej: Camiseta azul" class="prod-name" /></td>
+      <td><input type="number" min="1" value="1" class="prod-qty" oninput="updateTotal()" /></td>
+      <td><input type="number" min="0" value="0" placeholder="0" class="prod-price" oninput="updateTotal()" /></td>
+      <td><button type="button" class="btn-sm danger" onclick="removeRow(${rowCount})">✕</button></td>`;
+    tbody.appendChild(tr);
+    updateTotal();
+  }
+
+  function removeRow(id) {
+    const el = document.getElementById('row-' + id);
+    if (el) el.remove();
+    updateTotal();
+  }
+
+  function updateTotal() {
+    const qtys = document.querySelectorAll('.prod-qty');
+    const prices = document.querySelectorAll('.prod-price');
+    let total = 0;
+    for (let i = 0; i < qtys.length; i++)
+      total += (parseFloat(qtys[i].value) || 0) * (parseFloat(prices[i].value) || 0);
+    document.getElementById('total-display').textContent = '$ ' + total.toLocaleString('es-CO');
+  }
+
+  function submitOrder(e) {
+    e.preventDefault();
+    const products = [];
+    const names = document.querySelectorAll('.prod-name');
+    const qtys = document.querySelectorAll('.prod-qty');
+    const prices = document.querySelectorAll('.prod-price');
+    for (let i = 0; i < names.length; i++)
+      if (names[i].value.trim())
+        products.push({ name: names[i].value.trim(), qty: parseFloat(qtys[i].value)||1, price: parseFloat(prices[i].value)||0 });
+
+    const now = new Date();
+    const order = {
+      id: genId(),
+      cliente: document.getElementById('cliente').value.trim(),
+      correo: document.getElementById('correo').value.trim(),
+      direccion: document.getElementById('direccion').value.trim(),
+      products, status: 'Recibido',
+      createdAt: now.toISOString(),
+      steps: [{ label: 'Recibido', time: formatTime(now) }],
+    };
+    const orders = getOrders();
+    orders.unshift(order);
+    saveOrders(orders);
+    lastCreatedId = order.id;
+    document.getElementById('modal-order-id').textContent = order.id;
+    document.getElementById('modal-overlay').classList.add('open');
+    document.getElementById('order-form').reset();
+    document.getElementById('products-body').innerHTML = '';
+    rowCount = 0;
+    updateTotal();
+    addProductRow();
+  }
+
+  function formatTime(date) {
+    return date.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function copyOrderId() {
+    navigator.clipboard.writeText(lastCreatedId).then(() => showToast('ID copiado al portapapeles'));
+  }
+
+  function goToTracking() {
+    document.getElementById('modal-overlay').classList.remove('open');
+    navigate('seguimiento');
+    setTimeout(() => { document.getElementById('track-input').value = lastCreatedId; trackOrder(); }, 100);
+  }
+
+  function trackOrder() {
+    const id = document.getElementById('track-input').value.trim().toUpperCase();
+    const container = document.getElementById('track-result');
+    if (!id) { container.innerHTML = ''; return; }
+    const order = getOrders().find(o => o.id === id);
+    if (!order) {
+      container.innerHTML = `<div class="empty-state"><div class="icon">🔍</div><p>No encontramos un pedido con el ID <strong>${id}</strong>.<br>Verifica el ID e intenta de nuevo.</p></div>`;
+      return;
+    }
+    const statusIdx = STATUSES.indexOf(order.status);
+    const stepsHtml = STATUSES.map((s, i) => {
+      const done = i < statusIdx, active = i === statusIdx;
+      const stepData = order.steps ? order.steps.find(st => st.label === s) : null;
+      return `<div class="step ${done?'done':active?'active':''}">
+        <div class="step-dot"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="step-body"><div class="step-title">${s}</div><div class="step-time">${stepData ? stepData.time : '—'}</div></div>
+      </div>`;
+    }).join('');
+    const total = order.products ? order.products.reduce((a, p) => a + p.qty * p.price, 0) : 0;
+    container.innerHTML = `
+      <div class="track-result-card">
+        <div class="order-card-header" style="margin-bottom:16px">
+          <div><div class="order-label">Pedido</div><div class="order-id">${order.id}</div></div>
+          <span class="badge ${STATUS_BADGES[order.status]||'badge-gray'}">${order.status}</span>
+        </div>
+        <div class="track-meta">
+          <div class="track-meta-item"><div class="label">Cliente</div><div class="value">${order.cliente}</div></div>
+          <div class="track-meta-item"><div class="label">Dirección</div><div class="value">${order.direccion}</div></div>
+          <div class="track-meta-item"><div class="label">Total</div><div class="value">$ ${total.toLocaleString('es-CO')}</div></div>
+          <div class="track-meta-item"><div class="label">Fecha</div><div class="value">${new Date(order.createdAt).toLocaleDateString('es-CO')}</div></div>
+        </div>
+        <div class="steps">${stepsHtml}</div>
+        <div style="margin-top:20px">
+          ${statusIdx < STATUSES.length-1
+            ? `<button class="btn-sm" onclick="advanceStatus('${order.id}')">Avanzar estado →</button>`
+            : '<span style="font-size:.85rem;color:var(--accent-dark);font-weight:600">✓ Pedido entregado</span>'}
+        </div>
+      </div>`;
+  }
+
+  function advanceStatus(id) {
+    const orders = getOrders();
+    const order = orders.find(o => o.id === id);
+    if (!order) return;
+    const idx = STATUSES.indexOf(order.status);
+    if (idx < STATUSES.length - 1) {
+      order.status = STATUSES[idx + 1];
+      if (!order.steps) order.steps = [];
+      order.steps.push({ label: order.status, time: formatTime(new Date()) });
+      saveOrders(orders);
+      showToast('Estado actualizado: ' + order.status);
+      trackOrder();
+    }
+  }
+
+  function renderHistory() {
+    const orders = getOrders();
+    const container = document.getElementById('history-container');
+    if (!orders.length) {
+      container.innerHTML = `<div class="empty-state"><div class="icon">📋</div><p>Aún no has creado ningún pedido.<br>¡Crea el primero!</p><br><button class="btn btn-primary" onclick="navigate('home')" style="margin-top:8px">Crear pedido</button></div>`;
+      return;
+    }
+    container.innerHTML = `<div class="history-list">${orders.map(o => `
+      <div class="history-item" onclick="goToOrder('${o.id}')">
+        <div class="history-item-left">
+          <div class="id">${o.id}</div>
+          <div class="name">${o.cliente} · ${o.direccion}</div>
+        </div>
+        <div class="history-item-right">
+          <span class="badge ${STATUS_BADGES[o.status]||'badge-gray'}">${o.status}</span>
+          <div class="date">${new Date(o.createdAt).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'})}</div>
+        </div>
+      </div>`).join('')}</div>`;
+  }
+
+  function goToOrder(id) {
+    navigate('seguimiento');
+    setTimeout(() => { document.getElementById('track-input').value = id; trackOrder(); }, 50);
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2800);
+  }
+
+  document.getElementById('modal-overlay').addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('open');
+  });
+
+  addProductRow();
+</script>
 </body>
 </html>
