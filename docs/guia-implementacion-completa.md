@@ -298,31 +298,45 @@ Múltiples node pools solo tienen sentido cuando hay requisitos de hardware muy 
 
 ---
 
-### Paso 2 — Agregar el Node Group
+### Paso 2 — Agregar el Node Group desde CloudShell
 
-Una vez el clúster esté **Active**, desde la tab **Compute → Add node group**:
+> **AWS Academy — usar CloudShell** para todos los comandos siguientes. CloudShell ya está autenticado y tiene `kubectl`, `helm` y `docker` preinstalados.
 
-| Campo | Valor |
-|---|---|
-| Name | `como-vapp-nodes` |
-| Node IAM role | `LabRole` |
-| AMI type | `Amazon Linux 2` **(x86_64 — NO ARM)** |
-| Instance type | `t3.small` |
-| Disk size | `20 GB` |
-| Min size | `2` |
-| Desired size | `2` |
-| Max size | `4` |
+Desde **CloudShell**, crear el node group con AWS CLI:
 
-- **Subnets:** seleccionar **solo las 2 privadas** (`subnet-0ae8342a0d3da1f7a`, `subnet-0103e2f7c432c90aa`)
-- Click **Next → Next → Create**
+```bash
+aws eks create-nodegroup \
+  --cluster-name como-vapp-eks \
+  --nodegroup-name como-vapp-nodes \
+  --node-role arn:aws:iam::886240425170:role/LabRole \
+  --subnets subnet-0ae8342a0d3da1f7a subnet-0103e2f7c432c90aa \
+  --instance-types t3.medium \
+  --ami-type AL2023_x86_64_STANDARD \
+  --scaling-config minSize=2,maxSize=4,desiredSize=2 \
+  --disk-size 20 \
+  --region us-east-1
+```
 
-> Tarda ~5 minutos adicionales.
+> **Notas importantes:**
+> - Usar `t3.medium` (no `t3.small`) — `t3.small` tiene límite de 11 pods por nodo, insuficiente para los pods del sistema + los 3 servicios. `t3.medium` soporta 17 pods por nodo.
+> - Usar `AL2023_x86_64_STANDARD` — EKS 1.33+ ya no soporta Amazon Linux 2 (`AL2_x86_64`).
+> - Subnets **privadas** únicamente — los nodos no deben tener IPs públicas.
+
+Tarda ~5 minutos. Monitorear con:
+
+```bash
+aws eks describe-nodegroup \
+  --cluster-name como-vapp-eks \
+  --nodegroup-name como-vapp-nodes \
+  --query 'nodegroup.status' --output text \
+  --region us-east-1
+```
 
 ---
 
 ### Paso 3 — Conectar kubectl
 
-```powershell
+```bash
 aws eks update-kubeconfig --name como-vapp-eks --region us-east-1
 
 # Verificar nodos (esperar hasta ver 2 en estado "Ready")
@@ -340,6 +354,8 @@ kubectl cluster-info
 
 Este controlador es necesario para que el `Ingress` cree automáticamente un ALB en AWS.
 
+> Todos los comandos desde **CloudShell**. Si Helm no está instalado: `curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash`
+
 ```bash
 helm repo add eks https://aws.github.io/eks-charts
 helm repo update
@@ -347,13 +363,19 @@ helm repo update
 helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
   -n kube-system \
   --set clusterName=como-vapp-eks \
-  --set serviceAccount.create=true \
+  --set region=us-east-1 \
+  --set vpcId=vpc-01c2081877a103408 \
+  --set serviceAccount.create=false \
   --set serviceAccount.name=aws-load-balancer-controller
 
-# Verificar que el controlador está corriendo
-kubectl -n kube-system get deployment aws-load-balancer-controller
-# READY debe mostrar 2/2
+# Verificar que el controlador está corriendo (~30 seg)
+kubectl -n kube-system get pods -l app.kubernetes.io/name=aws-load-balancer-controller
+# Ambos pods deben estar en Running
 ```
+
+> **AWS Academy — parámetros críticos:**
+> - `--set region` y `--set vpcId` son obligatorios — sin ellos el controlador no puede detectar la región desde EC2 metadata y entra en CrashLoopBackOff.
+> - `--set serviceAccount.create=false` — el service account debe existir previamente (creado por `rbac.yaml`) para que el controlador use el rol del nodo (LabRole) en vez de IRSA.
 
 ---
 
@@ -361,58 +383,56 @@ kubectl -n kube-system get deployment aws-load-balancer-controller
 
 **Tiempo estimado: ~5–8 minutos** (depende de la conexión)
 
+> Hacer desde **AWS CloudShell** — tiene Docker preinstalado y ya está autenticado con la cuenta Academy. No requiere Docker Desktop local.
+
 ```bash
-# Pararse en la raíz del proyecto
-cd ../../   # si sigues desde infra/terraform
+# Clonar el repo en CloudShell (si no está clonado)
+git clone https://github.com/ssaturno/como-vapp-architecture-bootcamp.git
+cd como-vapp-architecture-bootcamp
+
+# Si ya está clonado, traer últimos cambios
+# git pull
 
 # Login a ECR
 aws ecr get-login-password --region us-east-1 | \
   docker login --username AWS --password-stdin \
-  $(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com
+  886240425170.dkr.ecr.us-east-1.amazonaws.com
 
 # Build y push — orders-service
-docker build -t $ECR_ORDERS:0.1.0 services/orders-dotnet/
-docker push $ECR_ORDERS:0.1.0
+docker build -t 886240425170.dkr.ecr.us-east-1.amazonaws.com/como-vapp-dev-orders-service:0.1.0 services/orders-dotnet/
+docker push 886240425170.dkr.ecr.us-east-1.amazonaws.com/como-vapp-dev-orders-service:0.1.0
 
 # Build y push — admin-service
-docker build -t $ECR_ADMIN:0.1.0 services/admin-kotlin/
-docker push $ECR_ADMIN:0.1.0
+docker build -t 886240425170.dkr.ecr.us-east-1.amazonaws.com/como-vapp-dev-admin-service:0.1.0 services/admin-kotlin/
+docker push 886240425170.dkr.ecr.us-east-1.amazonaws.com/como-vapp-dev-admin-service:0.1.0
 
 # Build y push — notifications-service
-docker build -t $ECR_NOTIF:0.1.0 services/notifications-python/
-docker push $ECR_NOTIF:0.1.0
-
-# Verificar las imágenes en ECR
-aws ecr list-images --repository-name como-vapp-dev-orders-service
-aws ecr list-images --repository-name como-vapp-dev-admin-service
-aws ecr list-images --repository-name como-vapp-dev-notifications-service
+docker build -t 886240425170.dkr.ecr.us-east-1.amazonaws.com/como-vapp-dev-notifications-service:0.1.0 services/notifications-python/
+docker push 886240425170.dkr.ecr.us-east-1.amazonaws.com/como-vapp-dev-notifications-service:0.1.0
 ```
 
 ---
 
 ## 8. Kubernetes — editar manifiestos
 
-**Tiempo estimado: ~2 minutos**
-
-Reemplazar los placeholders en los manifiestos con los valores reales de Terraform.
+> Los manifiestos ya tienen los valores reales de Terraform hardcodeados en el repo (actualizados durante el setup). No es necesario hacer reemplazos manuales. Verificar que no queden placeholders:
 
 ```bash
-cd deploy/k8s
-
-# Reemplazar valores en configmaps.yaml
-sed -i "s|REEMPLAZAR_CON_TF_OUTPUT_orders_table_name|$TF_ORDERS_TABLE|g" configmaps.yaml
-sed -i "s|REEMPLAZAR_CON_TF_OUTPUT_notifications_queue_url|$TF_SQS_URL|g" configmaps.yaml
-sed -i "s|REEMPLAZAR_CON_TF_OUTPUT_ses_verified_sender|$TF_SES_SENDER|g" configmaps.yaml
-
-# Reemplazar URIs ECR en los deployments
-sed -i "s|REEMPLAZAR_ECR_URI/como-vapp-dev-orders-service|$ECR_ORDERS|g" orders-deployment.yaml
-sed -i "s|REEMPLAZAR_ECR_URI/como-vapp-dev-admin-service|$ECR_ADMIN|g" admin-deployment.yaml
-sed -i "s|REEMPLAZAR_ECR_URI/como-vapp-dev-notifications-service|$ECR_NOTIF|g" notifications-deployment.yaml
-
-# Verificar que no quedan placeholders
+cd ~/como-vapp-architecture-bootcamp/deploy/k8s
 grep -r "REEMPLAZAR" *.yaml
 # No debe aparecer ningún resultado
 ```
+
+Si aparece algún placeholder, reemplazarlo manualmente en el archivo correspondiente con los valores del output de Terraform:
+
+| Placeholder | Valor real |
+|---|---|
+| `REEMPLAZAR_CON_TF_OUTPUT_orders_table_name` | `como-vapp-dev-orders` |
+| `REEMPLAZAR_CON_TF_OUTPUT_notifications_queue_url` | `https://sqs.us-east-1.amazonaws.com/886240425170/como-vapp-dev-notifications` |
+| `REEMPLAZAR_CON_TF_OUTPUT_ses_verified_sender` | `samarissaturno@gmail.com` |
+| `REEMPLAZAR_ECR_URI/como-vapp-dev-orders-service` | `886240425170.dkr.ecr.us-east-1.amazonaws.com/como-vapp-dev-orders-service` |
+| `REEMPLAZAR_ECR_URI/como-vapp-dev-admin-service` | `886240425170.dkr.ecr.us-east-1.amazonaws.com/como-vapp-dev-admin-service` |
+| `REEMPLAZAR_ECR_URI/como-vapp-dev-notifications-service` | `886240425170.dkr.ecr.us-east-1.amazonaws.com/como-vapp-dev-notifications-service` |
 
 ---
 
@@ -446,7 +466,7 @@ kubectl apply -f ingress.yaml
 ### Esperar que los pods estén Ready
 
 ```bash
-# Esperar hasta ver 6/6 Running (2 réplicas × 3 servicios)
+# Esperar hasta ver los pods en Running (2 réplicas × 3 servicios = 6 pods)
 kubectl -n como-vapp-dev get pods -w
 # Ctrl+C cuando todos estén Running
 
