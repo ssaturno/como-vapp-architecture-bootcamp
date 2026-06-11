@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Como Vapp en AWS — Arquitectura de Microservicios</title>
+<style>
+  :root {
+    --green:    #10b981;
+    --green-d:  #059669;
+    --green-l:  #d1fae5;
+    --blue:     #3b82f6;
+    --blue-d:   #1d4ed8;
+    --blue-l:   #dbeafe;
+    --purple:   #8b5cf6;
+    --purple-l: #ede9fe;
+    --orange:   #f59e0b;
+    --orange-l: #fef3c7;
+    --teal:     #06b6d4;
+    --teal-l:   #cffafe;
+    --red:      #ef4444;
+    --red-l:    #fee2e2;
+    --dark:     #111827;
+    --gray:     #6b7280;
+    --border:   #e5e7eb;
+    --bg:       #f9fafb;
+    --white:    #ffffff;
+    --slide-w:  1200px;
+    --slide-h:  675px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: #1e1e2e;
+    color: var(--dark);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ── CONTROLS ── */
+  .controls {
+    display: flex; align-items: center; gap: 16px;
+    margin-bottom: 14px; z-index: 10;
+  }
+  .ctrl-btn {
+    background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2);
+    color: #fff; width: 40px; height: 40px; border-radius: 50%;
+    cursor: pointer; font-size: 1.1rem; transition: background .15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ctrl-btn:hover { background: rgba(255,255,255,.25); }
+  .ctrl-btn:disabled { opacity: .3; cursor: default; }
+  .slide-counter { color: rgba(255,255,255,.7); font-size: .9rem; min-width: 80px; text-align: center; }
+  .progress-bar { width: 200px; height: 4px; background: rgba(255,255,255,.15); border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--green); border-radius: 2px; transition: width .3s ease; }
+
+  /* ── STAGE ── */
+  .stage {
+    width: var(--slide-w); height: var(--slide-h);
+    position: relative; border-radius: 16px; overflow: hidden;
+    box-shadow: 0 32px 80px rgba(0,0,0,.6);
+  }
+  .slide {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    display: none; animation: fadeIn .35s ease;
+  }
+  .slide.active { display: flex; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+  /* ── SLIDE LAYOUTS ── */
+  .slide-cover {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a2f 60%, #0d2818 100%);
+    flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 50px 60px; position: relative; overflow: hidden;
+  }
+  .slide-cover::before {
+    content:''; position:absolute; width:600px; height:600px; border-radius:50%;
+    background: radial-gradient(circle, rgba(16,185,129,.15) 0%, transparent 70%);
+    top:-150px; right:-100px;
+  }
+  .slide-cover::after {
+    content:''; position:absolute; width:400px; height:400px; border-radius:50%;
+    background: radial-gradient(circle, rgba(59,130,246,.1) 0%, transparent 70%);
+    bottom:-100px; left:-80px;
+  }
+  .slide-dark {
+    background: linear-gradient(135deg, #0f172a 0%, #1a2744 100%);
+    flex-direction: column; padding: 36px 52px;
+  }
+  .slide-light {
+    background: var(--bg);
+    flex-direction: column; padding: 36px 52px;
+  }
+  .slide-white {
+    background: #fff;
+    flex-direction: column; padding: 36px 52px;
+  }
+  .section-divider {
+    background: linear-gradient(135deg, #10b981, #3b82f6);
+    flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 60px;
+  }
+
+  /* ── EYEBROW + TITLE ── */
+  .eyebrow {
+    font-size: .72rem; font-weight: 700; letter-spacing: 2.5px;
+    text-transform: uppercase; margin-bottom: 4px;
+  }
+  .ey-green  { color: var(--green-d); }
+  .ey-blue   { color: var(--blue-d); }
+  .ey-purple { color: var(--purple); }
+  .ey-orange { color: var(--orange); }
+  .ey-white  { color: rgba(255,255,255,.5); }
+  .ey-teal   { color: var(--teal); }
+
+  .slide-h1 {
+    font-size: 1.9rem; font-weight: 800; letter-spacing: -.5px; line-height: 1.15;
+    margin-bottom: 6px;
+  }
+  .h1-dark  { color: var(--dark); }
+  .h1-white { color: #fff; }
+
+  .slide-sub {
+    font-size: .85rem; color: var(--gray); margin-bottom: 16px; line-height: 1.5;
+  }
+  .sub-muted { color: rgba(255,255,255,.5); }
+
+  /* ── COVER ── */
+  .cover-tag {
+    background: rgba(16,185,129,.2); border: 1px solid rgba(16,185,129,.4);
+    color: var(--green); font-size: .8rem; font-weight: 700; letter-spacing: 2px;
+    text-transform: uppercase; padding: 6px 18px; border-radius: 20px;
+    margin-bottom: 20px; position: relative; z-index: 1;
+  }
+  .cover-title {
+    font-size: 4rem; font-weight: 900; letter-spacing: -2px; color: #fff;
+    line-height: 1; margin-bottom: 8px; position: relative; z-index: 1;
+  }
+  .cover-title .accent { color: var(--green); }
+  .cover-subtitle {
+    font-size: 1.15rem; color: rgba(255,255,255,.55);
+    margin-bottom: 24px; position: relative; z-index: 1;
+  }
+  .cover-pills {
+    display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;
+    position: relative; z-index: 1; margin-bottom: 20px;
+  }
+  .pill {
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15);
+    color: rgba(255,255,255,.8); padding: 7px 16px; border-radius: 20px;
+    font-size: .82rem; font-weight: 500;
+  }
+  .cover-author {
+    position: absolute; bottom: 22px; left: 0; right: 0;
+    text-align: center; color: rgba(255,255,255,.3); font-size: .75rem; z-index: 1;
+  }
+
+  /* ── CARDS ── */
+  .card {
+    background: #fff; border: 1.5px solid var(--border);
+    border-radius: 12px; padding: 16px;
+  }
+  .card-dark {
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+    border-radius: 12px; padding: 16px;
+  }
+  .card-green { background: var(--green-l); border: 1.5px solid #6ee7b7; border-radius: 12px; padding: 14px; }
+  .card-blue  { background: var(--blue-l);  border: 1.5px solid #93c5fd;  border-radius: 12px; padding: 14px; }
+  .card-orange{ background: var(--orange-l);border: 1.5px solid #fcd34d; border-radius: 12px; padding: 14px; }
+  .card-teal  { background: var(--teal-l);  border: 1.5px solid #67e8f9;  border-radius: 12px; padding: 14px; }
+  .card-purple{ background: var(--purple-l);border: 1.5px solid #c4b5fd; border-radius: 12px; padding: 14px; }
+
+  .card-icon  { font-size: 1.3rem; margin-bottom: 5px; }
+  .card-title { font-size: .86rem; font-weight: 700; margin-bottom: 4px; }
+  .card-desc  { font-size: .76rem; color: var(--gray); line-height: 1.5; }
+
+  /* ── GRIDS ── */
+  .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2,1fr); gap: 12px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
+  .grid-auto-rows { grid-auto-rows: 1fr; }
+
+  /* ── BADGES ── */
+  .badge { padding: 3px 10px; border-radius: 20px; font-size: .72rem; font-weight: 600; display: inline-block; }
+  .badge-green  { background: var(--green-l);  color: var(--green-d); }
+  .badge-blue   { background: var(--blue-l);   color: var(--blue-d); }
+  .badge-purple { background: var(--purple-l); color: #6d28d9; }
+  .badge-orange { background: var(--orange-l); color: #92400e; }
+  .badge-teal   { background: var(--teal-l);   color: #0e7490; }
+  .badge-gray   { background: #f3f4f6; color: #374151; }
+
+  /* ── CHECKLIST ── */
+  .check-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .check-list li { display: flex; align-items: flex-start; gap: 10px; font-size: .84rem; line-height: 1.5; }
+  .ci { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0; margin-top: 1px; font-size: .68rem; font-weight: 700; }
+  .ci-g  { background: var(--green-l);  color: var(--green-d); }
+  .ci-b  { background: var(--blue-l);   color: var(--blue-d); }
+  .ci-o  { background: var(--orange-l); color: #92400e; }
+  .ci-r  { background: var(--red-l);    color: #b91c1c; }
+  .ci-t  { background: var(--teal-l);   color: #0e7490; }
+  .ci-p  { background: var(--purple-l); color: #6d28d9; }
+
+  /* ── TABLES ── */
+  .mini-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+  .mini-table th {
+    background: #f3f4f6; padding: 9px 12px; text-align: left;
+    font-weight: 700; font-size: .72rem; color: var(--gray);
+    text-transform: uppercase; letter-spacing: .5px;
+  }
+  .mini-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .mini-table tr:last-child td { border-bottom: none; }
+  .mini-table tr:hover td { background: #f9fafb; }
+
+  .dark-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+  .dark-table th {
+    background: rgba(255,255,255,.08); padding: 10px 14px; text-align: left;
+    font-weight: 700; font-size: .72rem; color: rgba(255,255,255,.5);
+    text-transform: uppercase; letter-spacing: .5px;
+  }
+  .dark-table td { padding: 9px 14px; border-bottom: 1px solid rgba(255,255,255,.07); vertical-align: middle; color: rgba(255,255,255,.85); }
+  .dark-table tr:last-child td { border-bottom: none; }
+  .dark-table td.academy { color: var(--orange); }
+  .dark-table td.prod    { color: var(--teal); }
+
+  /* ── ARCH BOXES ── */
+  .arch-box {
+    padding: 8px 12px; border-radius: 8px; font-size: .76rem; font-weight: 600;
+    text-align: center; border: 1.5px solid transparent; line-height: 1.3;
+  }
+  .ab-green  { background: var(--green-l);  border-color: #6ee7b7; color: var(--green-d); }
+  .ab-blue   { background: var(--blue-l);   border-color: #93c5fd; color: var(--blue-d); }
+  .ab-purple { background: var(--purple-l); border-color: #c4b5fd; color: #6d28d9; }
+  .ab-orange { background: var(--orange-l); border-color: #fcd34d; color: #92400e; }
+  .ab-teal   { background: var(--teal-l);   border-color: #67e8f9; color: #0e7490; }
+  .ab-gray   { background: #f3f4f6; border-color: #d1d5db; color: #374151; }
+
+  /* ── CODE ── */
+  .code-block {
+    background: #0f172a; border-radius: 8px; padding: 10px 14px;
+    font-family: 'Fira Code','Cascadia Code',monospace; font-size: .72rem;
+    line-height: 1.6; color: #e2e8f0;
+  }
+
+  /* ── STAT ── */
+  .stat-num   { font-size: 2.4rem; font-weight: 900; line-height: 1; }
+  .stat-label { font-size: .76rem; color: var(--gray); margin-top: 2px; }
+
+  /* ── SECTION DIVIDER ── */
+  .section-divider h2 {
+    font-size: 2.8rem; font-weight: 900; color: #fff;
+    letter-spacing: -1px; margin-bottom: 10px;
+  }
+  .section-divider p { color: rgba(255,255,255,.7); font-size: 1rem; }
+  .divider-icon { font-size: 2.6rem; margin-bottom: 14px; }
+
+  /* ── PROBLEM ROW ── */
+  .prob-row {
+    display: flex; align-items: flex-start; gap: 10px; padding: 11px 14px;
+    border-radius: 10px; background: #fff; border: 1.5px solid var(--border);
+  }
+  .prob-badge {
+    flex-shrink: 0; padding: 3px 10px; border-radius: 20px;
+    font-size: .72rem; font-weight: 700; margin-top: 1px; white-space: nowrap;
+  }
+  .pb-red  { background: var(--red-l);    color: #b91c1c; }
+  .pb-green{ background: var(--green-l);  color: var(--green-d); }
+  .prob-arr { flex-shrink: 0; color: var(--gray); font-size: 1rem; margin-top: 2px; padding: 0 2px; }
+  .prob-text{ font-size: .79rem; line-height: 1.5; }
+
+  /* ── TABLE WRAP ── */
+  .table-wrap { overflow: hidden; flex: 1; display: flex; flex-direction: column; }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <button class="ctrl-btn" id="prevBtn" onclick="go(-1)" disabled>&#8592;</button>
+  <span class="slide-counter" id="counter">1 / 12</span>
+  <button class="ctrl-btn" id="nextBtn" onclick="go(1)">&#8594;</button>
+  <div class="progress-bar"><div class="progress-fill" id="progress" style="width:8.33%"></div></div>
+</div>
+
+<div class="stage">
+
+<!-- ══════════════════════════════════════════════
+     SLIDE 1 — PORTADA
+══════════════════════════════════════════════ -->
+<div class="slide slide-cover active">
+  <div class="cover-tag">Bootcamp Arquitectura de Nube · 2026</div>
+  <h1 class="cover-title">Como Vapp<br><span class="accent">en AWS</span></h1>
+  <div class="cover-pills">
+    <span class="pill">☸️ Amazon EKS</span>
+    <span class="pill">🏗️ Terraform</span>
+    <span class="pill">🔐 Defense in Depth</span>
+    <span class="pill">📦 Docker + ECR</span>
+    <span class="pill">📬 DynamoDB + SQS</span>
+  </div>
+
+  <!-- Team members -->
+  <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;position:relative;z-index:1;margin-bottom:8px;">
+    <div style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);border-radius:10px;padding:10px 22px;text-align:center;">
+      <div style="font-size:.94rem;font-weight:700;color:#fff;">Samaris Saturno</div>
+    </div>
+    <div style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:10px 22px;text-align:center;">
+      <div style="font-size:.94rem;font-weight:700;color:rgba(255,255,255,.85);">Juan P. Sánchez</div>
+    </div>
+    <div style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:10px 22px;text-align:center;">
+      <div style="font-size:.94rem;font-weight:700;color:rgba(255,255,255,.85);">Juan García</div>
+    </div>
+    <div style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:10px 22px;text-align:center;">
+      <div style="font-size:.94rem;font-weight:700;color:rgba(255,255,255,.85);">Fernando Martínez</div>
+    </div>
+  </div>
+
+  <div class="cover-author">Bootcamp Arquitectura de Nube · 2026 · 12 slides · ~15 min</div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SLIDE 2 — EL PROBLEMA
+══════════════════════════════════════════════ -->
+<div class="slide slide-white">
+  <p class="eyebrow ey-green">El problema</p>
+  <h2 class="slide-h1 h1-dark">¿Qué necesitábamos construir?</h2>
+  <p class="slide-sub">Sistema de pedidos de comida con 3 actores independientes que deben comunicarse sin acoplamiento.</p>
+
+  <div class="grid-3" style="margin-bottom:14px;">
+    <div class="card-green" style="display:flex;flex-direction:column;gap:8px;">
+      <div class="card-icon">🛒</div>
+      <div class="card-title" style="font-size:.92rem;">Cliente</div>
+      <div class="card-desc">Crea pedidos y consulta el estado en tiempo real desde el frontend estático en S3.</div>
+    </div>
+    <div class="card-orange" style="display:flex;flex-direction:column;gap:8px;">
+      <div class="card-icon">👨‍🍳</div>
+      <div class="card-title" style="font-size:.92rem;">Cocina / Admin</div>
+      <div class="card-desc">Gestiona y actualiza el estado de los pedidos. Solo acceso interno — sin exposición pública.</div>
+    </div>
+    <div class="card-blue" style="display:flex;flex-direction:column;gap:8px;">
+      <div class="card-icon">🔔</div>
+      <div class="card-title" style="font-size:.92rem;">Notificaciones</div>
+      <div class="card-desc">Informa al cliente de cada cambio de estado. Consume la cola SQS y envía email vía SES.</div>
+    </div>
+  </div>
+
+  <div class="card" style="border-left:4px solid var(--green);flex:1;display:flex;flex-direction:column;justify-content:center;">
+    <p style="font-size:.76rem;font-weight:700;color:var(--green-d);margin-bottom:12px;letter-spacing:.5px;text-transform:uppercase;">Requisitos clave</p>
+    <ul class="check-list">
+      <li><span class="ci ci-g">✓</span><span><strong>Servicios independientes</strong> — fallos aislados, despliegue autónomo sin afectar a los demás</span></li>
+      <li><span class="ci ci-b">✓</span><span><strong>Comunicación asíncrona</strong> — un servicio caído no bloquea al resto (buffer SQS de 14 días)</span></li>
+      <li><span class="ci ci-o">✓</span><span><strong>Trazabilidad completa</strong> — cada pedido registrado en DynamoDB con TTL, PITR y Streams habilitados</span></li>
+      <li><span class="ci ci-p">✓</span><span><strong>Infraestructura reproducible</strong> — <code style="font-size:.75rem;background:#f3f4f6;padding:1px 5px;border-radius:4px;">terraform destroy + apply</code> = mismo sistema en minutos</span></li>
+    </ul>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SLIDE 3 — ARQUITECTURA GENERAL
+══════════════════════════════════════════════ -->
+<div class="slide slide-light" style="padding:28px 36px;">
+  <!-- Header -->
+  <div style="margin-bottom:10px;">
+    <p class="eyebrow ey-blue">Arquitectura</p>
+    <h2 class="slide-h1 h1-dark" style="font-size:1.6rem;margin-bottom:0;">Flujo de datos completo</h2>
+  </div>
+
+  <!-- Diagram: 3 columns -->
+  <div style="flex:1;display:flex;gap:0;min-height:0;">
+
+    <!-- ── COLUMN 1: Internet / Edge ── -->
+    <div style="flex:0 0 190px;display:flex;flex-direction:column;gap:0;border:2px solid #d1d5db;border-radius:12px;overflow:hidden;background:#f9fafb;">
+      <div style="background:#e5e7eb;padding:6px 10px;text-align:center;font-size:.65rem;font-weight:800;color:#374151;letter-spacing:1.5px;text-transform:uppercase;">🌐 Internet / Edge</div>
+      <div style="flex:1;display:flex;flex-direction:column;justify-content:space-evenly;padding:10px 10px;gap:6px;">
+        <div class="arch-box ab-gray" style="font-size:.8rem;padding:8px;">
+          👤 Usuario / Navegador
+        </div>
+        <div style="text-align:center;color:var(--teal);font-size:.85rem;font-weight:700;">↓ carga sitio</div>
+        <div class="arch-box ab-teal" style="font-size:.77rem;">
+          🪣 S3 Frontend<br><span style="font-weight:400;font-size:.68rem;">Static website · AES256</span>
+        </div>
+        <div style="text-align:center;color:var(--blue);font-size:.85rem;font-weight:700;">↓ API calls</div>
+        <div class="arch-box ab-blue" style="font-size:.77rem;">
+          🛡️ WAF + ALB<br><span style="font-weight:400;font-size:.68rem;">Port 80 · /orders path</span>
+        </div>
+        <div style="border-top:1px dashed #d1d5db;margin-top:4px;padding-top:6px;">
+          <div class="arch-box ab-gray" style="font-size:.72rem;">
+            👨‍🍳 Admin<br><span style="font-weight:400;font-size:.66rem;">kubectl port-forward</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ARROW 1 ── -->
+    <div style="flex:0 0 36px;display:flex;flex-direction:column;justify-content:space-around;align-items:center;">
+      <div style="text-align:center;">
+        <div style="color:var(--blue);font-size:1.1rem;font-weight:900;">→</div>
+        <div style="font-size:.6rem;color:var(--blue);font-weight:600;">/orders</div>
+      </div>
+      <div style="text-align:center;margin-top:20px;">
+        <div style="color:var(--gray);font-size:1.1rem;font-weight:900;">→</div>
+        <div style="font-size:.6rem;color:var(--gray);font-weight:600;">interno</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="color:var(--teal);font-size:1.1rem;font-weight:900;">←</div>
+        <div style="font-size:.6rem;color:var(--teal);font-weight:600;">poll</div>
+      </div>
+    </div>
+
+    <!-- ── COLUMN 2: EKS ── -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:0;border:2px solid #93c5fd;border-radius:12px;overflow:hidden;background:rgba(219,234,254,.25);">
+      <div style="background:#dbeafe;padding:6px 10px;text-align:center;font-size:.65rem;font-weight:800;color:var(--blue-d);letter-spacing:1.5px;text-transform:uppercase;">☸️ Amazon EKS · namespace: como-vapp-dev · t3.medium × 2 nodos</div>
+      <div style="flex:1;display:flex;flex-direction:column;justify-content:space-evenly;padding:12px 14px;gap:8px;">
+
+        <!-- orders -->
+        <div style="background:#fff;border:1.5px solid #93c5fd;border-radius:10px;padding:10px 14px;display:flex;gap:12px;align-items:center;">
+          <div style="flex-shrink:0;width:38px;height:38px;background:var(--blue-l);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">☸️</div>
+          <div style="flex:1;">
+            <div style="font-size:.84rem;font-weight:700;color:var(--blue-d);">orders-service</div>
+            <div style="font-size:.72rem;color:var(--gray);">.NET / C# · :8080 · ×2 réplicas · Multi-AZ</div>
+          </div>
+          <span class="badge badge-green" style="font-size:.65rem;">Expuesto ALB</span>
+        </div>
+
+        <!-- admin -->
+        <div style="background:#fff;border:1.5px solid #fcd34d;border-radius:10px;padding:10px 14px;display:flex;gap:12px;align-items:center;">
+          <div style="flex-shrink:0;width:38px;height:38px;background:var(--orange-l);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">☸️</div>
+          <div style="flex:1;">
+            <div style="font-size:.84rem;font-weight:700;color:#92400e;">admin-service</div>
+            <div style="font-size:.72rem;color:var(--gray);">Kotlin / Spring Boot · :8081 · ×2 réplicas · interno</div>
+          </div>
+          <span class="badge badge-orange" style="font-size:.65rem;">Solo interno</span>
+        </div>
+
+        <!-- notifications -->
+        <div style="background:#fff;border:1.5px solid #67e8f9;border-radius:10px;padding:10px 14px;display:flex;gap:12px;align-items:center;">
+          <div style="flex-shrink:0;width:38px;height:38px;background:var(--teal-l);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">☸️</div>
+          <div style="flex:1;">
+            <div style="font-size:.84rem;font-weight:700;color:#0e7490;">notifications-service</div>
+            <div style="font-size:.72rem;color:var(--gray);">Python · :8082 · ×2 réplicas · event-driven</div>
+          </div>
+          <span class="badge badge-teal" style="font-size:.65rem;">SQS consumer</span>
+        </div>
+
+        <!-- Observability footer -->
+        <div style="border-top:1.5px dashed #93c5fd;padding-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+          <span class="badge badge-purple" style="font-size:.65rem;">📊 Prometheus + Grafana</span>
+          <span class="badge badge-blue" style="font-size:.65rem;">📋 Fluent Bit → CloudWatch</span>
+          <span class="badge badge-gray" style="font-size:.65rem;">🔐 RBAC por namespace</span>
+          <span class="badge badge-gray" style="font-size:.65rem;">securityContext ✓</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ARROW 2 ── -->
+    <div style="flex:0 0 36px;display:flex;flex-direction:column;justify-content:space-around;align-items:center;">
+      <div style="text-align:center;">
+        <div style="color:var(--orange);font-size:1.1rem;font-weight:900;">→</div>
+        <div style="font-size:.6rem;color:var(--orange);">writes</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="color:var(--orange);font-size:1.1rem;font-weight:900;">→</div>
+        <div style="font-size:.6rem;color:var(--orange);">writes</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="color:var(--teal);font-size:1.1rem;font-weight:900;">←</div>
+        <div style="font-size:.6rem;color:var(--teal);">consume</div>
+      </div>
+    </div>
+
+    <!-- ── COLUMN 3: Managed Services ── -->
+    <div style="flex:0 0 240px;display:flex;flex-direction:column;gap:0;border:2px solid #fcd34d;border-radius:12px;overflow:hidden;background:rgba(254,243,199,.25);">
+      <div style="background:#fef3c7;padding:6px 10px;text-align:center;font-size:.65rem;font-weight:800;color:#92400e;letter-spacing:1.5px;text-transform:uppercase;">☁️ AWS Managed Services</div>
+      <div style="flex:1;display:flex;flex-direction:column;justify-content:space-evenly;padding:10px 12px;gap:4px;">
+        <div class="arch-box ab-orange" style="font-size:.77rem;padding:8px 10px;">
+          🗄️ DynamoDB — orders table<br><span style="font-weight:400;font-size:.67rem;">PITR · TTL · SSE AWS-managed</span>
+        </div>
+        <div style="text-align:center;color:var(--orange);font-size:.78rem;font-weight:700;">↓ Streams NEW_AND_OLD_IMAGES</div>
+        <div class="arch-box ab-purple" style="font-size:.77rem;padding:8px 10px;">
+          λ Lambda — stream-processor<br><span style="font-weight:400;font-size:.67rem;">Python 3.12 · INSERT + MODIFY</span>
+        </div>
+        <div style="text-align:center;color:var(--purple);font-size:.78rem;font-weight:700;">↓ publica mensaje</div>
+        <div class="arch-box ab-orange" style="font-size:.77rem;padding:8px 10px;">
+          📬 SQS + DLQ<br><span style="font-weight:400;font-size:.67rem;">14 días · redrive max=3 · SSE-SQS</span>
+        </div>
+        <div style="text-align:center;color:var(--teal);font-size:.78rem;font-weight:700;">↓ notifications-svc procesa</div>
+        <div class="arch-box ab-teal" style="font-size:.77rem;padding:8px 10px;">
+          ✉️ SES<br><span style="font-weight:400;font-size:.67rem;">Email al cliente (simulado Academy)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Infra bar -->
+  <div style="margin-top:10px;background:#1e293b;border-radius:8px;padding:7px 14px;display:flex;gap:7px;flex-wrap:wrap;align-items:center;">
+    <span style="font-size:.66rem;font-weight:700;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:1px;">VPC 10.0.0.0/16:</span>
+    <span class="badge badge-green" style="font-size:.63rem;">2 subnets públicas (ALB)</span>
+    <span class="badge badge-blue" style="font-size:.63rem;">2 subnets privadas (EKS)</span>
+    <span class="badge badge-gray" style="font-size:.63rem;">NAT Gateway</span>
+    <span class="badge badge-purple" style="font-size:.63rem;">VPC Endpoints: DynamoDB · S3</span>
+    <span class="badge badge-orange" style="font-size:.63rem;">ECR × 4 repos</span>
+    <span class="badge badge-gray" style="font-size:.63rem;">CloudWatch</span>
+    <span class="badge badge-teal" style="font-size:.63rem;">AWS Config</span>
+    <span class="badge badge-gray" style="font-size:.63rem;">IAM LabRole</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SLIDE 4 — LOS 3 MICROSERVICIOS
+══════════════════════════════════════════════ -->
+<div class="slide slide-white">
+  <p class="eyebrow ey-blue">Microservicios</p>
+  <h2 class="slide-h1 h1-dark">3 servicios, 3 responsabilidades</h2>
+
+  <div class="grid-3 grid-auto-rows" style="flex:1;margin-top:12px;">
+    <!-- orders-service -->
+    <div class="card" style="border-top:3px solid var(--blue);display:flex;flex-direction:column;gap:10px;">
+      <div>
+        <span class="badge badge-blue" style="font-size:.78rem;">orders-service</span>
+        <div style="font-size:.7rem;color:var(--gray);margin-top:4px;">.NET / C# · Puerto :8080 · ×2 réplicas</div>
+      </div>
+      <ul class="check-list" style="gap:5px;">
+        <li><span class="ci ci-b">→</span><span><code style="font-size:.72rem;background:#f0f9ff;padding:1px 5px;border-radius:4px;">POST /orders</code> — crea pedido</span></li>
+        <li><span class="ci ci-b">→</span><span><code style="font-size:.72rem;background:#f0f9ff;padding:1px 5px;border-radius:4px;">GET /orders/{id}</code> — consulta estado</span></li>
+      </ul>
+      <div style="background:#f0fdf4;border-radius:8px;padding:8px 10px;font-size:.76rem;color:var(--green-d);font-weight:600;">
+        ✅ Expuesto públicamente vía ALB · Ingress HTTPS rule
+      </div>
+      <p class="card-desc" style="flex:1;">Escribe directamente en DynamoDB. Cada imagen vive en su propio repositorio ECR. Rolling updates sin downtime.</p>
+      <div style="padding-top:8px;border-top:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap;">
+        <span class="badge badge-gray">📦 ECR repo</span>
+        <span class="badge badge-green">Liveness ✓</span>
+        <span class="badge badge-green">Readiness ✓</span>
+        <span class="badge badge-blue">topologySpread ✓</span>
+      </div>
+    </div>
+
+    <!-- admin-service -->
+    <div class="card" style="border-top:3px solid var(--orange);display:flex;flex-direction:column;gap:10px;">
+      <div>
+        <span class="badge badge-orange" style="font-size:.78rem;">admin-service</span>
+        <div style="font-size:.7rem;color:var(--gray);margin-top:4px;">Kotlin / Spring Boot · Puerto :8081 · ×2 réplicas</div>
+      </div>
+      <ul class="check-list" style="gap:5px;">
+        <li><span class="ci ci-o">→</span><span><code style="font-size:.72rem;background:#fffbeb;padding:1px 5px;border-radius:4px;">PATCH /orders/{id}/status</code></span></li>
+        <li><span class="ci ci-o">→</span><span>Actualiza estado: PENDING → PREPARING → READY</span></li>
+      </ul>
+      <div style="background:#fffbeb;border-radius:8px;padding:8px 10px;font-size:.76rem;color:#92400e;font-weight:600;">
+        🔒 Sin exposición pública por diseño — <code style="font-size:.72rem;">kubectl port-forward</code> en demo
+      </div>
+      <p class="card-desc" style="flex:1;">Actualiza el estado del pedido en DynamoDB. La modificación dispara DynamoDB Streams → Lambda → SQS → Notifications.</p>
+      <div style="padding-top:8px;border-top:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap;">
+        <span class="badge badge-gray">📦 ECR repo</span>
+        <span class="badge badge-green">Liveness ✓</span>
+        <span class="badge badge-green">Readiness ✓</span>
+        <span class="badge badge-orange">Solo interno ✓</span>
+      </div>
+    </div>
+
+    <!-- notifications-service -->
+    <div class="card" style="border-top:3px solid var(--teal);display:flex;flex-direction:column;gap:10px;">
+      <div>
+        <span class="badge badge-teal" style="font-size:.78rem;">notifications-service</span>
+        <div style="font-size:.7rem;color:var(--gray);margin-top:4px;">Python · Puerto :8082 · ×2 réplicas</div>
+      </div>
+      <ul class="check-list" style="gap:5px;">
+        <li><span class="ci ci-t">→</span><span>Long-polling SQS cada 20 segundos</span></li>
+        <li><span class="ci ci-t">→</span><span>Procesa mensaje → envía email vía SES</span></li>
+        <li><span class="ci ci-t">→</span><span>Sin endpoint HTTP público — 100% event-driven</span></li>
+      </ul>
+      <div style="background:#ecfeff;border-radius:8px;padding:8px 10px;font-size:.76rem;color:#0e7490;font-weight:600;">
+        🛡️ Si cae → SQS retiene mensajes 14 días. Zero message loss.
+      </div>
+      <p class="card-desc" style="flex:1;">Completamente desacoplado. Escala independientemente de los otros servicios. DLQ captura fallos de procesamiento.</p>
+      <div style="padding-top:8px;border-top:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap;">
+        <span class="badge badge-gray">📦 ECR repo</span>
+        <span class="badge badge-green">Liveness ✓</span>
+        <span class="badge badge-green">Readiness ✓</span>
+        <span class="badge badge-teal">Event-driven ✓</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SLIDE 5 — TERRAFORM
+══════════════════════════════════════════════ -->
+<div class="slide slide-white">
+  <p class="eyebrow ey-orange">Infraestructura como código</p>
+  <h2 class="slide-h1 h1-dark">Terraform — lo que provisiona</h2>
+
+  <div class="grid-3 grid-auto-rows" style="margin-top:12px;flex:1;">
+    <div class="card" style="display:flex;gap:10px;align-items:flex-start;">
+      <div style="font-size:1.3rem;flex-shrink:0;">🌐</div>
+      <div><div class="card-title">VPC + Redes</div><div class="card-desc">4 subnets (2 públicas · 2 privadas), IGW, NAT Gateway, Route Tables, VPC Endpoints (DynamoDB · S3)</div></div>
+    </div>
+    <div class="card" style="display:flex;gap:10px;align-items:flex-start;">
+      <div style="font-size:1.3rem;flex-shrink:0;">🔐</div>
+      <div><div class="card-title">Security Groups</div><div class="card-desc">ALB SG: solo 80/443 → NodePort. EKS Nodes SG: tráfico solo desde ALB SG</div></div>
+    </div>
+    <div class="card" style="display:flex;gap:10px;align-items:flex-start;">
+      <div style="font-size:1.3rem;flex-shrink:0;">🗄️</div>
+      <div><div class="card-title">DynamoDB</div><div class="card-desc">Tabla orders · Streams NEW+OLD · PITR habilitado · TTL 90d · SSE AWS-managed</div></div>
+    </div>
+    <div class="card" style="display:flex;gap:10px;align-items:flex-start;">
+      <div style="font-size:1.3rem;flex-shrink:0;">📬</div>
+      <div><div class="card-title">SQS + DLQ</div><div class="card-desc">Cola notifications · Dead Letter Queue · redrive maxReceive=3 · SSE-SQS encriptado</div></div>
+    </div>
+    <div class="card" style="display:flex;gap:10px;align-items:flex-start;">
+      <div style="font-size:1.3rem;flex-shrink:0;">λ</div>
+      <div><div class="card-title">Lambda</div><div class="card-desc">stream-processor · Python 3.12 · DynamoDB Streams trigger · INSERT + MODIFY events</div></div>
+    </div>
+    <div class="card" style="display:flex;gap:10px;align-items:flex-start;">
+      <div style="font-size:1.3rem;flex-shrink:0;">📦</div>
+      <div><div class="card-title">ECR × 4 repos</div><div class="card-desc">orders · admin · notifications · frontend — IMMUTABLE tags · scan on push activo</div></div>
+    </div>
+    <div class="card" style="display:flex;gap:10px;align-items:flex-start;">
+      <div style="font-size:1.3rem;flex-shrink:0;">🪣</div>
+      <div><div class="card-title">S3 × 2 buckets</div><div class="card-desc">Frontend website (public-read + AES256) + Config recordings bucket (privado)</div></div>
+    </div>
+    <div class="card" style="display:flex;gap:10px;align-items:flex-start;">
+      <div style="font-size:1.3rem;flex-shrink:0;">📊</div>
+      <div><div class="card-title">CloudWatch</div><div class="card-desc">Log Groups (retención 30d) + 3 Alarmas: DLQ depth · Queue >100 msgs · Lambda errors</div></div>
+    </div>
+    <div class="card" style="display:flex;gap:10px;align-items:flex-start;">
+      <div style="font-size:1.3rem;flex-shrink:0;">⚖️</div>
+      <div><div class="card-title">AWS Config</div><div class="card-desc">Configuration Recorder + 4 reglas managed compliance (habilitado manualmente en Academy)</div></div>
+    </div>
+  </div>
+
+  <div style="margin-top:10px;background:#0f172a;border-radius:10px;padding:9px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+    <span style="font-size:.8rem;color:rgba(255,255,255,.8);font-weight:600;">~35–40 recursos</span>
+    <span style="color:rgba(255,255,255,.2);">·</span>
+    <span style="font-size:.8rem;color:var(--orange);font-weight:600;">⚠ EKS creado con <code style="color:var(--green);">eksctl</code> (LabRole no tiene permisos para el recurso aws_eks_cluster en TF)</span>
+    <span style="color:rgba(255,255,255,.2);">·</span>
+    <span style="font-size:.8rem;color:var(--teal);font-weight:600;">State en S3 backend</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SLIDE 6 — DEMO EN VIVO
+══════════════════════════════════════════════ -->
+<div class="slide section-divider">
+  <div class="divider-icon">🚀</div>
+  <h2>Demo en vivo</h2>
+  <p>Veamos el sistema en funcionamiento — todo corriendo en AWS Academy</p>
+
+  <div style="display:flex;gap:12px;margin-top:28px;justify-content:center;flex-wrap:wrap;">
+    <div style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:16px 20px;text-align:center;min-width:100px;">
+      <div style="font-size:1.5rem;color:#86efac;font-weight:900;">✓</div>
+      <div style="font-size:.82rem;font-weight:700;color:#fff;margin-top:4px;">Frontend</div>
+      <div style="font-size:.7rem;color:rgba(255,255,255,.5);">S3 static site</div>
+    </div>
+    <div style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:16px 20px;text-align:center;min-width:100px;">
+      <div style="font-size:1.5rem;color:#86efac;font-weight:900;">✓</div>
+      <div style="font-size:.82rem;font-weight:700;color:#fff;margin-top:4px;">WAF + ALB</div>
+      <div style="font-size:.7rem;color:rgba(255,255,255,.5);">routing activo</div>
+    </div>
+    <div style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:16px 20px;text-align:center;min-width:100px;">
+      <div style="font-size:1.5rem;color:#86efac;font-weight:900;">✓</div>
+      <div style="font-size:.82rem;font-weight:700;color:#fff;margin-top:4px;">EKS</div>
+      <div style="font-size:.7rem;color:rgba(255,255,255,.5);">3 svc · 6 pods</div>
+    </div>
+    <div style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:16px 20px;text-align:center;min-width:100px;">
+      <div style="font-size:1.5rem;color:#86efac;font-weight:900;">✓</div>
+      <div style="font-size:.82rem;font-weight:700;color:#fff;margin-top:4px;">DynamoDB</div>
+      <div style="font-size:.7rem;color:rgba(255,255,255,.5);">Streams activos</div>
+    </div>
+    <div style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:16px 20px;text-align:center;min-width:100px;">
+      <div style="font-size:1.5rem;color:#86efac;font-weight:900;">✓</div>
+      <div style="font-size:.82rem;font-weight:700;color:#fff;margin-top:4px;">Lambda</div>
+      <div style="font-size:.7rem;color:rgba(255,255,255,.5);">stream-proc</div>
+    </div>
+    <div style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:16px 20px;text-align:center;min-width:100px;">
+      <div style="font-size:1.5rem;color:#86efac;font-weight:900;">✓</div>
+      <div style="font-size:.82rem;font-weight:700;color:#fff;margin-top:4px;">SQS</div>
+      <div style="font-size:.7rem;color:rgba(255,255,255,.5);">+ DLQ</div>
+    </div>
+  </div>
+
+  <!-- URL -->
+  <div style="margin-top:24px;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:12px 24px;display:flex;align-items:center;gap:12px;">
+    <span style="font-size:1.1rem;">🌐</span>
+    <div>
+      <div style="font-size:.7rem;color:rgba(255,255,255,.5);letter-spacing:1px;text-transform:uppercase;margin-bottom:2px;">Frontend accesible en:</div>
+      <code style="font-size:.88rem;color:#86efac;font-weight:600;">http://como-vapp-dev-frontend.s3-website-us-east-1.amazonaws.com/</code>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SLIDE 7 — RESILIENCIA
+══════════════════════════════════════════════ -->
+<div class="slide slide-white">
+  <p class="eyebrow ey-green">Resiliencia</p>
+  <h2 class="slide-h1 h1-dark">Self-healing: el sistema se repara solo</h2>
+
+  <div style="display:flex;flex-direction:column;gap:10px;flex:1;margin-top:14px;">
+    <div class="card" style="flex:1;border-left:4px solid var(--blue);display:flex;gap:14px;align-items:flex-start;">
+      <div style="font-size:1.5rem;flex-shrink:0;margin-top:2px;">♻️</div>
+      <div>
+        <div class="card-title" style="color:var(--blue-d);font-size:.9rem;margin-bottom:4px;">Kubernetes reconciliation loop</div>
+        <div class="card-desc">El control-plane compara continuamente el estado actual vs. el deseado. Con 2 réplicas, si cae 1 pod, K8s crea otro automáticamente. <strong>Demo:</strong> <code style="font-size:.71rem;background:#f0f9ff;padding:1px 5px;border-radius:4px;">kubectl delete pod -l app=notifications-service</code> → pods vuelven en ~10 segundos.</div>
+      </div>
+    </div>
+
+    <div class="card" style="flex:1;border-left:4px solid var(--orange);display:flex;gap:14px;align-items:flex-start;">
+      <div style="font-size:1.5rem;flex-shrink:0;margin-top:2px;">📬</div>
+      <div>
+        <div class="card-title" style="color:#92400e;font-size:.9rem;margin-bottom:4px;">SQS como buffer — Zero message loss</div>
+        <div class="card-desc">Mensajes persisten hasta <strong>14 días</strong>. Si notifications-svc cae completamente, los mensajes esperan en la cola y se procesan cuando el servicio vuelve. La DLQ captura los que fallan 3 veces y dispara una CloudWatch Alarm.</div>
+      </div>
+    </div>
+
+    <div class="card" style="flex:1;border-left:4px solid var(--teal);display:flex;gap:14px;align-items:flex-start;">
+      <div style="font-size:1.5rem;flex-shrink:0;margin-top:2px;">🔄</div>
+      <div>
+        <div class="card-title" style="color:#0e7490;font-size:.9rem;margin-bottom:4px;">Rolling Update — cero downtime</div>
+        <div class="card-desc">Estrategia: <code style="font-size:.71rem;background:#f0f9ff;padding:1px 5px;border-radius:4px;">maxUnavailable=1, maxSurge=1</code>. Siempre al menos 1 pod activo durante el deploy. Rollback instantáneo: <code style="font-size:.71rem;background:#f0f9ff;padding:1px 5px;border-radius:4px;">kubectl rollout undo deployment/orders-service</code>.</div>
+      </div>
+    </div>
+
+    <div class="card" style="flex:1;border-left:4px solid var(--purple);display:flex;gap:14px;align-items:flex-start;">
+      <div style="font-size:1.5rem;flex-shrink:0;margin-top:2px;">📡</div>
+      <div>
+        <div class="card-title" style="color:var(--purple);font-size:.9rem;margin-bottom:4px;">Multi-AZ con topologySpreadConstraints</div>
+        <div class="card-desc">Las 2 réplicas de cada servicio se distribuyen obligatoriamente entre <code style="font-size:.71rem;background:#faf5ff;padding:1px 5px;border-radius:4px;">us-east-1a</code> y <code style="font-size:.71rem;background:#faf5ff;padding:1px 5px;border-radius:4px;">us-east-1b</code>. Si una AZ falla, el servicio sigue operativo desde la otra zona.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SLIDE 8 — SEGURIDAD EN CAPAS
+══════════════════════════════════════════════ -->
+<div class="slide slide-white">
+  <p class="eyebrow ey-purple">Misión 2 — Defense in Depth</p>
+  <h2 class="slide-h1 h1-dark">Seguridad en capas</h2>
+
+  <div class="table-wrap" style="margin-top:10px;">
+    <table class="mini-table">
+      <thead>
+        <tr>
+          <th style="width:36%;">Control de seguridad</th>
+          <th>Implementación</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="badge badge-purple">runAsNonRoot</span></td><td><code style="font-size:.72rem;">runAsUser: 1001</code> — pods corren sin privilegios root en ningún servicio</td></tr>
+        <tr><td><span class="badge badge-purple">Filesystem inmutable</span></td><td><code style="font-size:.72rem;">readOnlyRootFilesystem: true</code> + <code style="font-size:.72rem;">emptyDir</code> montado en <code style="font-size:.72rem;">/tmp</code></td></tr>
+        <tr><td><span class="badge badge-purple">Sin capabilities Linux</span></td><td><code style="font-size:.72rem;">capabilities: drop: [ALL]</code> — sin capacidades peligrosas del kernel</td></tr>
+        <tr><td><span class="badge badge-purple">Syscalls filtradas</span></td><td><code style="font-size:.72rem;">seccompProfile: RuntimeDefault</code> — kernel filtra llamadas al sistema sospechosas</td></tr>
+        <tr><td><span class="badge badge-blue">Subnets privadas + NAT</span></td><td>Nodos EKS sin IP pública — todo el tráfico de salida pasa por NAT Gateway</td></tr>
+        <tr><td><span class="badge badge-blue">Security Groups restrictivos</span></td><td>ALB SG: solo 80/443 → NodePort. Nodos: solo tráfico proveniente del ALB SG</td></tr>
+        <tr><td><span class="badge badge-green">ECR scan on push</span></td><td><code style="font-size:.72rem;">scan_on_push: true</code> — detección automática de CVEs en cada imagen publicada</td></tr>
+        <tr><td><span class="badge badge-green">ECR tags IMMUTABLE</span></td><td>Un tag publicado no puede sobreescribirse — protección contra supply chain attacks</td></tr>
+        <tr><td><span class="badge badge-orange">DynamoDB SSE + PITR</span></td><td>Cifrado en reposo con llave AWS-managed · PITR: restauración a cualquier punto en 35 días</td></tr>
+        <tr><td><span class="badge badge-orange">RBAC por namespace</span></td><td><code style="font-size:.72rem;">Role developer-readonly</code>: solo <code style="font-size:.72rem;">get/list/watch</code> en namespace <code style="font-size:.72rem;">como-vapp-dev</code></td></tr>
+        <tr><td><span class="badge badge-orange">ServiceAccounts separados</span></td><td><code style="font-size:.72rem;">orders-sa · admin-sa · notifications-sa</code> — preparados para IRSA en producción</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SLIDE 9 — ACADEMY VS PRODUCCIÓN
+══════════════════════════════════════════════ -->
+<div class="slide slide-dark">
+  <p class="eyebrow ey-white">Diseño para producción</p>
+  <h2 class="slide-h1 h1-white">AWS Academy vs. Producción Real</h2>
+  <p style="color:rgba(255,255,255,.45);font-size:.8rem;margin-bottom:10px;">Decisiones tomadas por limitaciones de LabRole → plan claro de migración a producción</p>
+
+  <div class="table-wrap">
+    <table class="dark-table">
+      <thead>
+        <tr>
+          <th style="width:48%;">☁️ AWS Academy — implementado hoy</th>
+          <th>🚀 Producción Real — próximo paso</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="academy">LabRole compartido en todos los pods</td>
+          <td class="prod">IRSA: cada ServiceAccount con su propio IAM role de mínimo privilegio</td>
+        </tr>
+        <tr>
+          <td class="academy">Credenciales en ConfigMap (base64)</td>
+          <td class="prod">AWS Secrets Manager + CSI Driver — <code style="font-size:.71rem;color:#86efac;">secret-provider-class.yaml</code> ya preparado</td>
+        </tr>
+        <tr>
+          <td class="academy">EKS creado con eksctl (fuera de Terraform)</td>
+          <td class="prod">Cuenta AWS real → cluster EKS 100% Terraform con módulo oficial</td>
+        </tr>
+        <tr>
+          <td class="academy">ALB solo HTTP puerto 80</td>
+          <td class="prod">HTTPS + certificado ACM + redirect automático 301 HTTP → HTTPS</td>
+        </tr>
+        <tr>
+          <td class="academy">VPC Endpoints solo DynamoDB / S3</td>
+          <td class="prod">+ SQS · Secrets Manager · ECR API · ECR DKR — tráfico nunca sale de la VPC</td>
+        </tr>
+        <tr>
+          <td class="academy">Cifrado AES256 AWS-managed key</td>
+          <td class="prod">CMK en KMS con rotación automática cada 90 días</td>
+        </tr>
+        <tr>
+          <td class="academy">SES bloqueado en Academy</td>
+          <td class="prod">SES activo: sender verificado + templates HTML + DKIM configurado</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SLIDE 10 — AWS CONFIG COMPLIANCE
+══════════════════════════════════════════════ -->
+<div class="slide slide-white">
+  <p class="eyebrow ey-orange">Compliance continuo</p>
+  <h2 class="slide-h1 h1-dark">AWS Config — 4 reglas de compliance activas</h2>
+  <p class="slide-sub">Monitoreo continuo del estado de seguridad. Cualquier violación queda registrada automáticamente y puede disparar remediación.</p>
+
+  <div class="grid-2 grid-auto-rows" style="flex:1;margin-top:4px;">
+    <div class="card" style="border-left:4px solid var(--blue);display:flex;gap:14px;">
+      <div style="flex-shrink:0;">
+        <div style="width:44px;height:44px;background:var(--blue-l);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;">🔒</div>
+      </div>
+      <div style="flex:1;">
+        <div class="card-title" style="font-size:.86rem;"><code style="background:#f0f9ff;padding:2px 7px;border-radius:4px;color:var(--blue-d);">restricted-ssh</code></div>
+        <div class="card-desc" style="margin-top:5px;">Ningún Security Group permite el puerto 22 (SSH) abierto al mundo (0.0.0.0/0 o ::/0). Previene acceso SSH no autorizado desde Internet. Los nodos EKS están en subnets privadas de todas formas.</div>
+      </div>
+    </div>
+
+    <div class="card" style="border-left:4px solid var(--orange);display:flex;gap:14px;">
+      <div style="flex-shrink:0;">
+        <div style="width:44px;height:44px;background:var(--orange-l);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;">📡</div>
+      </div>
+      <div style="flex:1;">
+        <div class="card-title" style="font-size:.86rem;"><code style="background:#fffbeb;padding:2px 7px;border-radius:4px;color:#92400e;">vpc-flow-logs-enabled</code></div>
+        <div class="card-desc" style="margin-top:5px;">Verifica que VPC Flow Logs estén activos. Permite auditar todo el tráfico de red entrante y saliente para forensics, investigación de incidentes y detección de anomalías.</div>
+      </div>
+    </div>
+
+    <div class="card" style="border-left:4px solid var(--teal);display:flex;gap:14px;">
+      <div style="flex-shrink:0;">
+        <div style="width:44px;height:44px;background:var(--teal-l);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;">🔐</div>
+      </div>
+      <div style="flex:1;">
+        <div class="card-title" style="font-size:.86rem;"><code style="background:#ecfeff;padding:2px 7px;border-radius:4px;color:#0e7490;">encrypted-volumes</code></div>
+        <div class="card-desc" style="margin-top:5px;">Todos los volúmenes EBS de los nodos EKS deben estar cifrados en reposo. Garantiza que los datos almacenados en disco (imágenes de contenedor, logs) nunca estén en texto plano.</div>
+      </div>
+    </div>
+
+    <div class="card" style="border-left:4px solid var(--purple);display:flex;gap:14px;">
+      <div style="flex-shrink:0;">
+        <div style="width:44px;height:44px;background:var(--purple-l);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;">🗄️</div>
+      </div>
+      <div style="flex:1;">
+        <div class="card-title" style="font-size:.86rem;"><code style="background:#faf5ff;padding:2px 7px;border-radius:4px;color:#6d28d9;">dynamodb-encryption</code></div>
+        <div class="card-desc" style="margin-top:5px;">La tabla DynamoDB debe tener SSE activado. Garantiza que los datos de pedidos (órdenes, precios, clientes) estén cifrados en reposo y cumplan con regulaciones de protección de datos.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SLIDE 11 — DESAFÍOS
+══════════════════════════════════════════════ -->
+<div class="slide slide-white">
+  <p class="eyebrow ey-green">Lecciones aprendidas</p>
+  <h2 class="slide-h1 h1-dark">5 problemas reales → 5 soluciones reales</h2>
+
+  <div style="display:flex;flex-direction:column;gap:9px;flex:1;margin-top:14px;justify-content:space-evenly;">
+    <div class="prob-row">
+      <span class="prob-badge pb-red">⚠ Problema</span>
+      <span class="prob-text"><strong>EKS Auto Mode seleccionó instancias ARM</strong> — imágenes x86 fallaban al iniciar</span>
+      <span class="prob-arr">→</span>
+      <span class="prob-badge pb-green">✓ Solución</span>
+      <span class="prob-text">Desactivar Auto Mode → <strong>"Configure manually"</strong> con tipo de instancia <code style="font-size:.72rem;">x86_64</code></span>
+    </div>
+
+    <div class="prob-row">
+      <span class="prob-badge pb-red">⚠ Problema</span>
+      <span class="prob-text"><strong>t3.small sin headroom:</strong> máx 11 pods, no cabían Prometheus ni Grafana</span>
+      <span class="prob-arr">→</span>
+      <span class="prob-badge pb-green">✓ Solución</span>
+      <span class="prob-text">Migrar a <strong>t3.medium</strong> → capacidad para 17 pods por nodo con headroom de observabilidad</span>
+    </div>
+
+    <div class="prob-row">
+      <span class="prob-badge pb-red">⚠ Problema</span>
+      <span class="prob-text"><strong>IMDS hop limit=1</strong>: pods dentro de K8s no podían obtener credenciales de AWS (LabRole)</span>
+      <span class="prob-arr">→</span>
+      <span class="prob-badge pb-green">✓ Solución</span>
+      <span class="prob-text"><code style="font-size:.71rem;background:#f0fdf4;padding:1px 5px;border-radius:4px;">aws ec2 modify-instance-metadata-options --http-put-response-hop-limit 2</code> en cada nodo</span>
+    </div>
+
+    <div class="prob-row">
+      <span class="prob-badge pb-red">⚠ Problema</span>
+      <span class="prob-text"><strong>AWS Load Balancer Controller en CrashLoopBackOff</strong> — faltaba región y VPC ID</span>
+      <span class="prob-arr">→</span>
+      <span class="prob-badge pb-green">✓ Solución</span>
+      <span class="prob-text">Agregar <code style="font-size:.71rem;background:#f0fdf4;padding:1px 5px;border-radius:4px;">--set region=us-east-1 --set vpcId=vpc-xxx</code> al <code style="font-size:.71rem;">helm install</code></span>
+    </div>
+
+    <div class="prob-row">
+      <span class="prob-badge pb-red">⚠ Problema</span>
+      <span class="prob-text"><strong>SES bloqueado en AWS Academy</strong> — imposible verificar sender para enviar emails reales</span>
+      <span class="prob-arr">→</span>
+      <span class="prob-badge pb-green">✓ Solución</span>
+      <span class="prob-text">Variable <code style="font-size:.71rem;background:#f0fdf4;padding:1px 5px;border-radius:4px;">USE_SES=false</code> — notificaciones simuladas en logs. En cuenta real: SES activo con sender verificado.</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SLIDE 12 — CIERRE
+══════════════════════════════════════════════ -->
+<div class="slide slide-cover">
+  <div class="cover-tag" style="background:rgba(59,130,246,.2);border-color:rgba(59,130,246,.4);color:var(--blue);">Resultado final</div>
+
+  <div style="display:flex;gap:10px;justify-content:center;margin-bottom:22px;position:relative;z-index:1;flex-wrap:wrap;">
+    <div style="background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.35);border-radius:12px;padding:12px 18px;text-align:center;min-width:90px;">
+      <div class="stat-num" style="color:var(--green);">3</div>
+      <div class="stat-label" style="color:rgba(255,255,255,.6);">microservicios</div>
+    </div>
+    <div style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.35);border-radius:12px;padding:12px 18px;text-align:center;min-width:90px;">
+      <div class="stat-num" style="color:var(--blue);">6</div>
+      <div class="stat-label" style="color:rgba(255,255,255,.6);">pods activos</div>
+    </div>
+    <div style="background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.35);border-radius:12px;padding:12px 18px;text-align:center;min-width:90px;">
+      <div class="stat-num" style="color:var(--orange);">1</div>
+      <div class="stat-label" style="color:rgba(255,255,255,.6);">ALB internet-facing</div>
+    </div>
+    <div style="background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.35);border-radius:12px;padding:12px 18px;text-align:center;min-width:90px;">
+      <div class="stat-num" style="color:var(--purple);">1</div>
+      <div class="stat-label" style="color:rgba(255,255,255,.6);">tabla DynamoDB</div>
+    </div>
+    <div style="background:rgba(6,182,212,.15);border:1px solid rgba(6,182,212,.35);border-radius:12px;padding:12px 18px;text-align:center;min-width:90px;">
+      <div class="stat-num" style="color:var(--teal);">1</div>
+      <div class="stat-label" style="color:rgba(255,255,255,.6);">cola SQS</div>
+    </div>
+    <div style="background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.35);border-radius:12px;padding:12px 18px;text-align:center;min-width:90px;">
+      <div class="stat-num" style="color:var(--green);">1</div>
+      <div class="stat-label" style="color:rgba(255,255,255,.6);">Lambda stream</div>
+    </div>
+    <div style="background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.35);border-radius:12px;padding:12px 18px;text-align:center;min-width:90px;">
+      <div class="stat-num" style="color:var(--orange);">4</div>
+      <div class="stat-label" style="color:rgba(255,255,255,.6);">reglas compliance</div>
+    </div>
+    <div style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.35);border-radius:12px;padding:12px 18px;text-align:center;min-width:90px;">
+      <div class="stat-num" style="color:var(--blue);">40</div>
+      <div class="stat-label" style="color:rgba(255,255,255,.6);">recursos Terraform</div>
+    </div>
+  </div>
+
+  <p style="color:rgba(255,255,255,.7);font-size:1rem;margin-bottom:16px;position:relative;z-index:1;">
+    <span style="color:var(--green);font-weight:700;">Infraestructura reproducible:</span>
+    &nbsp;<code style="font-size:.88rem;background:rgba(255,255,255,.08);padding:4px 10px;border-radius:6px;">terraform destroy</code>
+    &nbsp;+&nbsp;
+    <code style="font-size:.88rem;background:rgba(255,255,255,.08);padding:4px 10px;border-radius:6px;">terraform apply</code>
+    &nbsp;= mismo sistema en minutos
+  </p>
+
+  <div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 22px;margin-bottom:18px;position:relative;z-index:1;">
+    <code style="font-size:.85rem;color:var(--teal);">📂 github.com/ssaturno/como-vapp-architecture-bootcamp</code>
+  </div>
+
+  <!-- Team -->
+  <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;position:relative;z-index:1;margin-bottom:14px;">
+    <div style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);border-radius:8px;padding:7px 16px;">
+      <div style="font-size:.84rem;font-weight:700;color:#fff;">Samaris Saturno</div>
+    </div>
+    <div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:7px 16px;">
+      <div style="font-size:.84rem;font-weight:700;color:rgba(255,255,255,.8);">Juan P. Sánchez</div>
+    </div>
+    <div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:7px 16px;">
+      <div style="font-size:.84rem;font-weight:700;color:rgba(255,255,255,.8);">Juan García</div>
+    </div>
+    <div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:7px 16px;">
+      <div style="font-size:.84rem;font-weight:700;color:rgba(255,255,255,.8);">Fernando Martínez</div>
+    </div>
+  </div>
+
+  <h2 style="font-size:2rem;font-weight:900;color:#fff;position:relative;z-index:1;">¡Gracias! · Preguntas bienvenidas 🙌</h2>
+</div>
+
+</div><!-- .stage -->
+
+<script>
+  let cur = 0;
+  const total = 12;
+  const slides = document.querySelectorAll('.slide');
+
+  function go(dir) {
+    slides[cur].classList.remove('active');
+    cur = Math.min(Math.max(cur + dir, 0), total - 1);
+    slides[cur].classList.add('active');
+    document.getElementById('counter').textContent = (cur+1) + ' / ' + total;
+    document.getElementById('progress').style.width = ((cur+1)/total*100) + '%';
+    document.getElementById('prevBtn').disabled = cur === 0;
+    document.getElementById('nextBtn').disabled = cur === total - 1;
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); go(1); }
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')                    { e.preventDefault(); go(-1); }
+  });
+
+  let tx = 0;
+  document.querySelector('.stage').addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive: true });
+  document.querySelector('.stage').addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - tx;
+    if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1);
+  }, { passive: true });
+</script>
+</body>
+</html>
